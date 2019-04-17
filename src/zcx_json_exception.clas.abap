@@ -5,11 +5,14 @@ class ZCX_JSON_EXCEPTION definition
 
 public section.
 
+  interfaces IF_T100_DYN_MSG .
+  interfaces IF_T100_MESSAGE .
+
   data ERRORS type BAPIRET2_T read-only .
 
   methods CONSTRUCTOR
     importing
-      !TEXTID like TEXTID optional
+      !TEXTID like IF_T100_MESSAGE=>T100KEY optional
       !PREVIOUS like PREVIOUS optional
       !ERRORS type BAPIRET2_T optional .
   class-methods RAISE
@@ -80,14 +83,19 @@ METHOD build_messages.
 ENDMETHOD.
 
 
-method CONSTRUCTOR.
+  method CONSTRUCTOR.
 CALL METHOD SUPER->CONSTRUCTOR
 EXPORTING
-TEXTID = TEXTID
 PREVIOUS = PREVIOUS
 .
 me->ERRORS = ERRORS .
-endmethod.
+clear me->textid.
+if textid is initial.
+  IF_T100_MESSAGE~T100KEY = IF_T100_MESSAGE=>DEFAULT_TEXTID.
+else.
+  IF_T100_MESSAGE~T100KEY = TEXTID.
+endif.
+  endmethod.
 
 
 METHOD get_errors.
