@@ -7,7 +7,8 @@
    <FOLDER_LOGIC>PREFIX</FOLDER_LOGIC>
    <IGNORE>
     <item>/.gitignore</item>
-    <item>/LICENSE</item>
+    <item>/LICENSE.md</item>
+    <item>/switch_namespace.js</item>
     <item>/README.md</item>
     <item>/package.json</item>
     <item>/.travis.yml</item>
