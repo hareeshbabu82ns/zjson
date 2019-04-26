@@ -5,12 +5,12 @@ class ZCL_JSON_ARRAY definition
   create public .
 
 public section.
+  type-pools ABAP .
 
   methods ADD
     importing
       !IV_VALUE type ANY optional
       !IR_ELEMENT type ref to ZIF_JSON_ELEMENT optional .
-  type-pools ABAP .
   methods REMOVE
     importing
       !IV_INDEX type I optional
@@ -29,11 +29,15 @@ public section.
       value(RR_ELEMENT) type ref to ZIF_JSON_ELEMENT .
   methods CONSTRUCTOR
     importing
-      !IT_TABLE type ANY TABLE optional .
+      !IT_DATA type ANY TABLE optional
+      value(IT_NAMES_MAP) type ZJSON_NAME_VALUE_TAB optional
+      value(IV_MAP_IGNORE_REST) type ABAP_BOOL default ABAP_FALSE .
   methods LENGTH
     returning
       value(RV_LENGTH) type INT4 .
 
+  methods ZIF_JSON_ELEMENT~AS_DATA
+    redefinition .
   methods ZIF_JSON_ELEMENT~DEEP_COPY
     redefinition .
   methods ZIF_JSON_ELEMENT~EQUALS
@@ -105,13 +109,53 @@ ENDMETHOD.
 METHOD constructor.
   super->constructor( ).
 
-  IF it_table IS SUPPLIED AND it_table IS NOT INITIAL.
+  DATA:
+    lr_descr TYPE REF TO cl_abap_typedescr,
+    lr_ele   TYPE REF TO zif_json_element.
+
+  FIELD-SYMBOLS:
+      <fs_line> TYPE any.
+
+  IF it_data IS SUPPLIED AND it_data IS NOT INITIAL.
     TRY.
-        mr_tabledescr ?= cl_abap_tabledescr=>describe_by_data( it_table ).
-        GET REFERENCE OF it_table INTO mr_table.
+        mr_tabledescr ?= cl_abap_tabledescr=>describe_by_data( it_data ).
+        GET REFERENCE OF it_data INTO mr_table.
+
+        LOOP AT it_data ASSIGNING <fs_line>.
+
+          TRY .
+              lr_descr ?= cl_abap_typedescr=>describe_by_data( <fs_line> ).
+
+              CASE lr_descr->kind.
+
+                WHEN cl_abap_typedescr=>kind_struct.
+                  CREATE OBJECT lr_ele TYPE zcl_json_object
+                    EXPORTING
+                      is_data            = <fs_line>
+                      it_names_map       = it_names_map
+                      iv_map_ignore_rest = iv_map_ignore_rest.
+
+                  add( ir_element = lr_ele ).
+
+                WHEN cl_abap_typedescr=>kind_elem.
+
+                  add( iv_value = <fs_line> ).
+
+                WHEN OTHERS.
+                  "Not a Valid Table Line Type
+                  zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Table Line' ).
+              ENDCASE.
+
+            CATCH cx_root..
+              "Not a Valid Table Line Type
+              zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Table Line' ).
+          ENDTRY.
+
+        ENDLOOP.
+
       CATCH cx_root.
         "Not a Valid Table Type
-        Zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Table' ).
+        zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Table' ).
     ENDTRY.
   ENDIF.
 
@@ -169,6 +213,64 @@ METHOD remove.
   ENDIF.
 
 ENDMETHOD.
+
+
+  METHOD zif_json_element~as_data.
+
+
+    DATA:
+      lr_line  TYPE REF TO data,
+      lr_descr TYPE REF TO cl_abap_typedescr,
+      lr_ele   TYPE REF TO zif_json_element.
+
+    FIELD-SYMBOLS:
+      <ft_data>        TYPE ANY TABLE,
+      <fs_line>        TYPE any,
+      <table_sorted>   TYPE SORTED TABLE,
+      <table_hashed>   TYPE HASHED TABLE,
+      <table_standard> TYPE STANDARD TABLE.
+
+    TRY.
+        mr_tabledescr ?= cl_abap_tabledescr=>describe_by_data( cv_data ).
+
+        ASSIGN cv_data TO <ft_data>.
+
+        LOOP AT mt_elements INTO lr_ele.
+          TRY .
+              CREATE DATA lr_line LIKE LINE OF <ft_data>.
+              ASSIGN lr_line->* TO <fs_line>.
+
+              IF lr_ele->is_null( ) EQ abap_true.
+                CONTINUE.
+              ELSE.
+                lr_ele->as_data( EXPORTING it_names_map = it_names_map
+                        iv_map_ignore_rest = iv_map_ignore_rest
+                        CHANGING cv_data = <fs_line> ).
+              ENDIF.
+
+              CASE mr_tabledescr->table_kind.
+                WHEN cl_abap_tabledescr=>tablekind_sorted.
+                  ASSIGN cv_data TO <table_sorted>.
+                  INSERT <fs_line> INTO TABLE <table_sorted>.
+                WHEN cl_abap_tabledescr=>tablekind_hashed.
+                  ASSIGN cv_data TO <table_hashed>.
+                  INSERT <fs_line> INTO TABLE <table_hashed>.
+                WHEN OTHERS.
+                  ASSIGN cv_data TO <table_standard>.
+                  APPEND <fs_line> TO <table_standard>.
+              ENDCASE.
+            CATCH cx_root..
+              "Not a Valid Table Line Type
+              zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Table Line' ).
+          ENDTRY.
+        ENDLOOP.
+
+      CATCH cx_root.
+        "Not a Valid Table Type
+        zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Table' ).
+    ENDTRY.
+
+  ENDMETHOD.
 
 
 METHOD Zif_json_element~deep_copy.

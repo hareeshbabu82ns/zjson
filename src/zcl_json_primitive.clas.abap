@@ -12,6 +12,8 @@ public section.
   class-data GC_INT2_MAX type I value 32767 ##NO_TEXT.
   class-data GC_INT4_MAX type I value CL_ABAP_MATH=>MAX_INT4 ##NO_TEXT.
   class-data C_BOOLEAN_TYPES type STRING value `\TYPE-POOL=ABAP\TYPE=ABAP_BOOL#\TYPE=BOOLEAN#\TYPE=BOOLE_D#\TYPE=XFELD` ##NO_TEXT.
+  class-data MV_REGEX_NUMBER type ref to CL_ABAP_REGEX read-only .
+  class-data MV_REGEX_JSON_UTC_TIMESTAMP type ref to CL_ABAP_REGEX read-only .
 
   methods CONSTRUCTOR
     importing
@@ -56,12 +58,11 @@ public section.
     redefinition .
   methods ZIF_JSON_ELEMENT~TO_STRING
     redefinition .
-protected section.
+  PROTECTED SECTION.
 private section.
 
   data MR_VALUE type ref to DATA .
   data MR_DESCR type ref to CL_ABAP_ELEMDESCR .
-  class-data MV_REGEX_NUMBER type ref to CL_ABAP_REGEX .
 
   class-methods PREPARE_PREMITIVE_DESCRIPTORS .
 ENDCLASS.
@@ -71,284 +72,312 @@ ENDCLASS.
 CLASS ZCL_JSON_PRIMITIVE IMPLEMENTATION.
 
 
-METHOD class_constructor.
-  prepare_premitive_descriptors( ).
+  METHOD class_constructor.
+    prepare_premitive_descriptors( ).
 
-  CREATE OBJECT mv_regex_number
-    EXPORTING
-      pattern = '^-?\d+(\.\d*)?-?$'.
+    CREATE OBJECT mv_regex_number
+      EXPORTING
+        pattern = '^-?\d+(\.\d*)?-?$'.
 *      pattern = '^([\d\?\*]+([\.][\d\?\*]*|,[\d\?\*]+)?([eE][+-]?[\d\?\*]+)?).*'. "#EC NOTEXT
 
-ENDMETHOD.
+    CREATE OBJECT mv_regex_json_utc_timestamp
+      EXPORTING
+*       pattern     = '^\d{4})-(\d{1,2})-(\d{1,2}?)[Tt](\d{1,2}):(\d{1,2}):(\d{1,2})([\.,]\d{1,6})?[Zz]?$'.
+*       pattern     = '^\d{4}-\d{1,2}-\d{1,2}?T\d{1,2}:\d{1,2}:\d{1,2}[\.,]\d{1,6}?Z?$'
+        pattern     = '^\d{4}-\d{1,2}-\d{1,2}T\d{1,2}:\d{1,2}:\d{1,2}([,.]\d{1,6})?Z$'
+*       pattern     = '^[0-9tz.,:-]+$'
+        ignore_case = abap_true.
 
 
-METHOD constructor.
-  super->constructor( ).
-
-  set_value( ir_value ).
-
-ENDMETHOD.
+  ENDMETHOD.
 
 
-METHOD create.
-  CREATE OBJECT rr_primitive
-    EXPORTING
-      ir_value = iv_data.
-ENDMETHOD.
+  METHOD constructor.
+    super->constructor( ).
+
+    set_value( ir_value ).
+
+  ENDMETHOD.
 
 
-METHOD from_string.
-  IF iv_string IS INITIAL.
-    " Parameter Initial
-    Zcx_json_exception=>raise( iv_msg_number = '007' ).
-  ENDIF.
+  METHOD create.
+    CREATE OBJECT rr_primitive
+      EXPORTING
+        ir_value = iv_data.
+  ENDMETHOD.
+
+
+  METHOD from_string.
+    IF iv_string IS INITIAL.
+      " Parameter Initial
+      zcx_json_exception=>raise( iv_msg_number = '007' ).
+    ENDIF.
 
 *  CL_ABAP_EXCEPTIONAL_VALUES=>get_max_value( data ).
 
-  DATA: lv_len TYPE i,
-        lv_split_whole TYPE string,
-        lv_split_decimal TYPE string.
+    DATA: lv_len           TYPE i,
+          lv_split_whole   TYPE string,
+          lv_split_decimal TYPE string.
 
-  DATA: lv_int TYPE i,
-        lr_descr TYPE REF TO cl_abap_elemdescr,
-        lr_data TYPE REF TO data.
+    DATA: lv_int       TYPE i,
+          lr_descr     TYPE REF TO cl_abap_elemdescr,
+          lr_data      TYPE REF TO data,
+          lv_timestamp TYPE timestamp.
 
-  FIELD-SYMBOLS: <fv_data> TYPE any.
+    FIELD-SYMBOLS: <fv_data> TYPE any.
 
-  IF iv_string EQ 'null' OR iv_string EQ 'NULL'. "null
-    "TBD - should not come here fr NULL creation
-  ELSEIF iv_string EQ 'true' OR iv_string EQ 'TRUE'. "boolean true
-    rr_primitive = Zcl_json_primitive=>create( abap_true ).
-  ELSEIF iv_string EQ 'false' OR iv_string EQ 'FALSE'. "boolean false
-    rr_primitive = Zcl_json_primitive=>create( abap_false ).
-  ELSEIF iv_string CO '0123456789-+eE. '. "number
-    IF iv_string NA '.eE'.
-      TRY.
-          MOVE iv_string TO lv_int.
-          rr_primitive = Zcl_json_primitive=>create( lv_int ).
-        CATCH cx_root.
-          "failed to convert to int, must be float/packed
-      ENDTRY.
-    ENDIF.
-    "packed
-    IF rr_primitive IS NOT BOUND. "not yet converted
-      SPLIT iv_string AT '.' INTO lv_split_whole lv_split_decimal.
-      lv_len = strlen( lv_split_decimal ). "fractional part
-      lv_int = strlen( lv_split_whole ). "intiger part
-      lr_descr = cl_abap_elemdescr=>get_p( p_length = lv_int p_decimals = lv_len ).
-      CREATE DATA lr_data TYPE HANDLE lr_descr.
-      ASSIGN lr_data->* TO <fv_data>.
-      MOVE iv_string TO <fv_data>.
-      rr_primitive = Zcl_json_primitive=>create( <fv_data> ).
-    ENDIF.
-  ELSE.
-    rr_primitive = Zcl_json_primitive=>create( iv_string ).
-  ENDIF.
-
-
-ENDMETHOD.
-
-
-METHOD get_primitive_type.
-
-  CASE mr_descr->type_kind.
-
-    WHEN cl_abap_typedescr=>typekind_string OR
-      cl_abap_typedescr=>typekind_clike OR
-      cl_abap_typedescr=>typekind_csequence OR
-      cl_abap_typedescr=>typekind_date OR
-      cl_abap_typedescr=>typekind_time OR
-      cl_abap_typedescr=>typekind_xstring OR
-      cl_abap_typedescr=>typekind_hex.
-
-      rv_kind = c_type_primitive_string.
-
-    WHEN cl_abap_typedescr=>typekind_packed OR
-      cl_abap_typedescr=>typekind_float OR
-      cl_abap_typedescr=>typekind_int OR
-      cl_abap_typedescr=>typekind_numeric OR
-      cl_abap_typedescr=>typekind_num.
-
-      rv_kind = c_type_primitive_number.
-
-    WHEN cl_abap_typedescr=>typekind_char.
-
-      IF mr_descr->absolute_name CS 'ABAP_BOOL' OR
-        mr_descr->absolute_name CS 'BOOLEAN'.
-        rv_kind = c_type_primitive_boolean.
-      ELSE.
-        rv_kind = c_type_primitive_string.
+    IF iv_string EQ 'null' OR iv_string EQ 'NULL'. "null
+      "TBD - should not come here fr NULL creation
+    ELSEIF iv_string EQ 'true' OR iv_string EQ 'TRUE'. "boolean true
+      rr_primitive = zcl_json_primitive=>create( abap_true ).
+    ELSEIF iv_string EQ 'false' OR iv_string EQ 'FALSE'. "boolean false
+      rr_primitive = zcl_json_primitive=>create( abap_false ).
+    ELSEIF iv_string CO '0123456789-+eE. '. "number
+      IF iv_string NA '.eE'.
+        TRY.
+            MOVE iv_string TO lv_int.
+            rr_primitive = zcl_json_primitive=>create( lv_int ).
+          CATCH cx_root.
+            "failed to convert to int, must be float/packed
+        ENDTRY.
+      ENDIF.
+      "packed
+      IF rr_primitive IS NOT BOUND. "not yet converted
+        SPLIT iv_string AT '.' INTO lv_split_whole lv_split_decimal.
+        lv_len = strlen( lv_split_decimal ). "fractional part
+        lv_int = strlen( lv_split_whole ). "intiger part
+        lr_descr = cl_abap_elemdescr=>get_p( p_length = lv_int p_decimals = lv_len ).
+        CREATE DATA lr_data TYPE HANDLE lr_descr.
+        ASSIGN lr_data->* TO <fv_data>.
+        MOVE iv_string TO <fv_data>.
+        rr_primitive = zcl_json_primitive=>create( <fv_data> ).
       ENDIF.
 
-    WHEN OTHERS.
-      rv_kind = c_type_null.
+    ELSE.
 
-  ENDCASE.
+      IF iv_string CO '0123456789TZ.,-:'. "timestamp
 
-ENDMETHOD.
+        lv_timestamp = zcl_json_util=>convert_json_utc_atimestamp( iv_string ).
+        IF lv_timestamp IS NOT INITIAL.
+          rr_primitive = zcl_json_primitive=>create( lv_timestamp ).
+        ENDIF.
+
+      ELSE.
+*        rr_primitive = zcl_json_primitive=>create( iv_string ).
+      ENDIF.
+
+    ENDIF.
+
+    IF rr_primitive IS NOT BOUND.
+      rr_primitive = zcl_json_primitive=>create( iv_string ).
+    ENDIF.
+
+  ENDMETHOD.
 
 
-METHOD prepare_premitive_descriptors.
+  METHOD get_primitive_type.
 
-  DATA: ls_comp LIKE LINE OF gt_premitives.
+    CASE mr_descr->type_kind.
 
-  TRY.
+      WHEN cl_abap_typedescr=>typekind_string OR
+        cl_abap_typedescr=>typekind_clike OR
+        cl_abap_typedescr=>typekind_csequence OR
+        cl_abap_typedescr=>typekind_date OR
+        cl_abap_typedescr=>typekind_time OR
+        cl_abap_typedescr=>typekind_xstring OR
+        cl_abap_typedescr=>typekind_hex.
 
-      ls_comp-name = 'GUID'.
-      ls_comp-type = cl_abap_elemdescr=>get_c( 32 ).
-      APPEND ls_comp TO gt_premitives.
+        rv_kind = c_type_primitive_string.
 
-      ls_comp-name = 'DATE'.
-      ls_comp-type = cl_abap_elemdescr=>get_d( ).
-      APPEND ls_comp TO gt_premitives.
+      WHEN cl_abap_typedescr=>typekind_packed OR
+        cl_abap_typedescr=>typekind_float OR
+        cl_abap_typedescr=>typekind_int OR
+        cl_abap_typedescr=>typekind_int1 OR
+        cl_abap_typedescr=>typekind_int8 OR
+        cl_abap_typedescr=>typekind_int2 OR
+        cl_abap_typedescr=>typekind_numeric OR
+        cl_abap_typedescr=>typekind_num.
 
-      ls_comp-name = 'TIME'.
-      ls_comp-type = cl_abap_elemdescr=>get_t( ).
-      APPEND ls_comp TO gt_premitives.
+        rv_kind = c_type_primitive_number.
 
-      ls_comp-name = 'TIMESTAMP'.
-      ls_comp-type ?= cl_abap_elemdescr=>describe_by_name( 'TZNTSTMPS' ).
-      APPEND ls_comp TO gt_premitives.
+      WHEN cl_abap_typedescr=>typekind_char.
 
-      ls_comp-name = 'TIMESTAMPL'.
-      ls_comp-type ?= cl_abap_elemdescr=>describe_by_name( 'TZNTSTMPL' ).
-      APPEND ls_comp TO gt_premitives.
+        IF mr_descr->absolute_name CS 'ABAP_BOOL' OR
+          mr_descr->absolute_name CS 'BOOLEAN'.
+          rv_kind = c_type_primitive_boolean.
+        ELSE.
+          rv_kind = c_type_primitive_string.
+        ENDIF.
 
-      ls_comp-name = 'TINYINT'.
-      ls_comp-type = cl_abap_elemdescr=>get_i( ).
-      APPEND ls_comp TO gt_premitives.
+      WHEN OTHERS.
+        rv_kind = c_type_null.
 
-      ls_comp-name = 'SMALLINT'.
-      ls_comp-type = cl_abap_elemdescr=>get_i( ).
-      APPEND ls_comp TO gt_premitives.
+    ENDCASE.
 
-      ls_comp-name = 'INTEGER'.
-      ls_comp-type = cl_abap_elemdescr=>get_i( ).
-      APPEND ls_comp TO gt_premitives.
+  ENDMETHOD.
 
-      ls_comp-name = 'BIGINT'.
-      ls_comp-type = cl_abap_elemdescr=>get_p( p_length = 12  p_decimals = 0 ).
-      APPEND ls_comp TO gt_premitives.
+
+  METHOD prepare_premitive_descriptors.
+
+    DATA: ls_comp LIKE LINE OF gt_premitives.
+
+    TRY.
+
+        ls_comp-name = 'GUID'.
+        ls_comp-type = cl_abap_elemdescr=>get_c( 32 ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'DATE'.
+        ls_comp-type = cl_abap_elemdescr=>get_d( ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'TIME'.
+        ls_comp-type = cl_abap_elemdescr=>get_t( ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'TIMESTAMP'.
+        ls_comp-type ?= cl_abap_elemdescr=>describe_by_name( 'TZNTSTMPS' ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'TIMESTAMPL'.
+        ls_comp-type ?= cl_abap_elemdescr=>describe_by_name( 'TZNTSTMPL' ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'TINYINT'.
+        ls_comp-type = cl_abap_elemdescr=>get_i( ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'SMALLINT'.
+        ls_comp-type = cl_abap_elemdescr=>get_i( ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'INTEGER'.
+        ls_comp-type = cl_abap_elemdescr=>get_i( ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'BIGINT'.
+        ls_comp-type = cl_abap_elemdescr=>get_p( p_length = 12  p_decimals = 0 ).
+        APPEND ls_comp TO gt_premitives.
 
 *      ls_comp-name = 'DECIMAL'.
 *      ls_comp-name = 'DEC'.
 *      ls_comp-name = 'SMALLDECIMAL'.
 *      ls_comp-type = cl_abap_elemdescr=>get_p( p_length = <ls_col>-data_length  p_decimals = <ls_col>-data_precision ).
 
-      ls_comp-name = 'REAL'.
-      ls_comp-type = cl_abap_elemdescr=>get_f( ).
-      APPEND ls_comp TO gt_premitives.
+        ls_comp-name = 'REAL'.
+        ls_comp-type = cl_abap_elemdescr=>get_f( ).
+        APPEND ls_comp TO gt_premitives.
 
-      ls_comp-name = 'DOUBLE'.
-      ls_comp-type = cl_abap_elemdescr=>get_f( ).
-      APPEND ls_comp TO gt_premitives.
-
-
-      ls_comp-name = 'CHAR'.
-      ls_comp-type = cl_abap_elemdescr=>get_c( 1 ).
-      APPEND ls_comp TO gt_premitives.
+        ls_comp-name = 'DOUBLE'.
+        ls_comp-type = cl_abap_elemdescr=>get_f( ).
+        APPEND ls_comp TO gt_premitives.
 
 
-      ls_comp-name = 'ALPHANUM'.
-      ls_comp-type = cl_abap_elemdescr=>get_n( 10 ).
-      APPEND ls_comp TO gt_premitives.
-
-      ls_comp-name = 'NUMBER'.
-      ls_comp-type = cl_abap_elemdescr=>get_n( 10 ).
-      APPEND ls_comp TO gt_premitives.
-
-      ls_comp-name = 'VARBINARY'.
-      ls_comp-type = cl_abap_elemdescr=>get_xstring( ).
-      APPEND ls_comp TO gt_premitives.
-
-      ls_comp-name = 'BLOB'.
-      ls_comp-type = cl_abap_elemdescr=>get_xstring( ).
-      APPEND ls_comp TO gt_premitives.
-
-      ls_comp-name = 'CLOB'.
-      ls_comp-type = cl_abap_elemdescr=>get_string( ).
-      APPEND ls_comp TO gt_premitives.
-
-      ls_comp-name = 'NCLOB'.
-      ls_comp-type = cl_abap_elemdescr=>get_string( ).
-      APPEND ls_comp TO gt_premitives.
-
-      ls_comp-name = 'TEXT'.
-      ls_comp-type = cl_abap_elemdescr=>get_string( ).
-      APPEND ls_comp TO gt_premitives.
-
-    CATCH cx_root.
-  ENDTRY.
-
-ENDMETHOD.
+        ls_comp-name = 'CHAR'.
+        ls_comp-type = cl_abap_elemdescr=>get_c( 1 ).
+        APPEND ls_comp TO gt_premitives.
 
 
-METHOD set_value.
+        ls_comp-name = 'ALPHANUM'.
+        ls_comp-type = cl_abap_elemdescr=>get_n( 10 ).
+        APPEND ls_comp TO gt_premitives.
 
-  FIELD-SYMBOLS: <fr_value> TYPE any.
-  DATA: lr_cxroot TYPE REF TO cx_root.
+        ls_comp-name = 'NUMBER'.
+        ls_comp-type = cl_abap_elemdescr=>get_n( 10 ).
+        APPEND ls_comp TO gt_premitives.
 
-  TRY .
-      mr_descr ?= cl_abap_elemdescr=>describe_by_data( ir_value ).
+        ls_comp-name = 'VARBINARY'.
+        ls_comp-type = cl_abap_elemdescr=>get_xstring( ).
+        APPEND ls_comp TO gt_premitives.
 
-      IF mr_descr->kind NE cl_abap_typedescr=>kind_elem
-        OR get_primitive_type( ) EQ c_type_null.
-        " Not a Valid Primitive Type
-        Zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Primitive' ).
-      ENDIF.
+        ls_comp-name = 'BLOB'.
+        ls_comp-type = cl_abap_elemdescr=>get_xstring( ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'CLOB'.
+        ls_comp-type = cl_abap_elemdescr=>get_string( ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'NCLOB'.
+        ls_comp-type = cl_abap_elemdescr=>get_string( ).
+        APPEND ls_comp TO gt_premitives.
+
+        ls_comp-name = 'TEXT'.
+        ls_comp-type = cl_abap_elemdescr=>get_string( ).
+        APPEND ls_comp TO gt_premitives.
+
+      CATCH cx_root.
+    ENDTRY.
+
+  ENDMETHOD.
+
+
+  METHOD set_value.
+
+    FIELD-SYMBOLS: <fr_value> TYPE any.
+    DATA: lr_cxroot TYPE REF TO cx_root.
+
+    TRY .
+        mr_descr ?= cl_abap_elemdescr=>describe_by_data( ir_value ).
+
+        IF mr_descr->kind NE cl_abap_typedescr=>kind_elem
+          OR get_primitive_type( ) EQ c_type_null.
+          " Not a Valid Primitive Type
+          zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Primitive' ).
+        ENDIF.
 
 *      CREATE DATA mr_value TYPE (mr_descr->type_kind).
-      CREATE DATA mr_value TYPE HANDLE mr_descr.
+        CREATE DATA mr_value TYPE HANDLE mr_descr.
 
-      ASSIGN mr_value->* TO <fr_value>.
+        ASSIGN mr_value->* TO <fr_value>.
 
-      MOVE ir_value TO <fr_value>.
+        MOVE ir_value TO <fr_value>.
 
-    CATCH cx_root INTO lr_cxroot.
-      " Not a Valid Primitive Type
-      Zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Primitive' previous = lr_cxroot ).
-  ENDTRY.
+      CATCH cx_root INTO lr_cxroot.
+        " Not a Valid Primitive Type
+        zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Primitive' previous = lr_cxroot ).
+    ENDTRY.
 
-ENDMETHOD.
+  ENDMETHOD.
 
 
-METHOD Zif_json_element~as_data.
+  METHOD zif_json_element~as_data.
 
-  DATA: lv_line      TYPE text255.
+    DATA: lv_line      TYPE text255.
 
-  FIELD-SYMBOLS: <fv_value> TYPE any.
-  ASSIGN mr_value->* TO <fv_value>.
+    FIELD-SYMBOLS: <fv_value> TYPE any.
+    ASSIGN mr_value->* TO <fv_value>.
 
-  IF mr_descr->type_kind EQ is_comp_attrs-type_kind.
-    cv_data = <fv_value>.
-    RETURN.
-  ENDIF.
+    IF mr_descr->type_kind EQ is_comp_attrs-type_kind.
+      cv_data = <fv_value>.
+      RETURN.
+    ENDIF.
 
-  CASE is_comp_attrs-type_kind.
+    CASE is_comp_attrs-type_kind.
 
-    WHEN cl_abap_elemdescr=>typekind_date.
-      "TODO: review cl_abap_datfm=>conv_date_ext_to_int
-      cv_data = |{ <fv_value>(4) }{ <fv_value>+5(2) }{ <fv_value>+8(2) }|.
+      WHEN cl_abap_elemdescr=>typekind_date.
+        "TODO: review cl_abap_datfm=>conv_date_ext_to_int
+        cv_data = |{ <fv_value>(4) }{ <fv_value>+5(2) }{ <fv_value>+8(2) }|.
 
-    WHEN cl_abap_typedescr=>typekind_time.
-      cv_data = |{ <fv_value>(2) }{ <fv_value>+3(2) }{ <fv_value>+6(2) }|.
+      WHEN cl_abap_typedescr=>typekind_time.
+        cv_data = |{ <fv_value>(2) }{ <fv_value>+3(2) }{ <fv_value>+6(2) }|.
 
-    WHEN cl_abap_typedescr=>typekind_xstring OR cl_abap_typedescr=>typekind_hex.
+      WHEN cl_abap_typedescr=>typekind_xstring OR cl_abap_typedescr=>typekind_hex.
 
-      Zcl_json_parser=>string_to_xstring( EXPORTING in = <fv_value>
-                                                CHANGING out = cv_data ).
-    WHEN cl_abap_typedescr=>typekind_char.
-      IF ( ( mr_descr->output_length EQ 32 OR mr_descr->output_length EQ 16 )
-              AND mr_descr->absolute_name CS '_GUID' ) OR
-        ( ( is_comp_attrs-type_kind EQ cl_abap_typedescr=>typekind_char
-              AND is_comp_attrs-length EQ 64 ) AND is_comp_attrs-name CS '_GUID' ).
-        Zcl_json_parser=>string_to_xstring( EXPORTING in = <fv_value>
+        zcl_json_parser=>string_to_xstring( EXPORTING in = <fv_value>
                                                   CHANGING out = cv_data ).
-      ELSE.
-        cv_data = <fv_value>.
-      ENDIF.
+      WHEN cl_abap_typedescr=>typekind_char.
+        IF ( ( mr_descr->output_length EQ 32 OR mr_descr->output_length EQ 16 )
+                AND mr_descr->absolute_name CS '_GUID' ) OR
+          ( ( is_comp_attrs-type_kind EQ cl_abap_typedescr=>typekind_char
+                AND is_comp_attrs-length EQ 64 ) AND is_comp_attrs-name CS '_GUID' ).
+          zcl_json_parser=>string_to_xstring( EXPORTING in = <fv_value>
+                                                    CHANGING out = cv_data ).
+        ELSE.
+          cv_data = <fv_value>.
+        ENDIF.
 
-    WHEN OTHERS.
+      WHEN OTHERS.
 *      IF is_comp_attrs IS NOT INITIAL.
 *        lv_line = <fv_value>.
 *        CALL FUNCTION 'RS_CONV_EX_2_IN_NO_DD'
@@ -360,7 +389,7 @@ METHOD Zif_json_element~as_data.
 *            OTHERS          = 20.
 *      ENDIF.
 
-  ENDCASE.
+    ENDCASE.
 
 *  "copied from CL_CRM_BOL_ABSTR_BO=>CONVERT_FROM_STRING
 *
@@ -464,179 +493,179 @@ METHOD Zif_json_element~as_data.
 
 
 
-  IF cv_data IS INITIAL.
-    cv_data = <fv_value>.
-  ENDIF.
-
-ENDMETHOD.
-
-
-METHOD Zif_json_element~as_string.
-  FIELD-SYMBOLS: <fv_value> TYPE any.
-  ASSIGN mr_value->* TO <fv_value>.
-  rv_string = |{ <fv_value> }|.
-ENDMETHOD.
-
-
-METHOD Zif_json_element~deep_copy.
-*  rv_element = me.
-  FIELD-SYMBOLS: <fs_val> TYPE any.
-
-  ASSIGN mr_value->* TO <fs_val>.
-
-  rv_element ?= Zcl_json_primitive=>create( <fs_val> ).
-
-
-ENDMETHOD.
-
-
-METHOD Zif_json_element~equals.
-  rv_equal = abap_false.
-  IF ir_element IS BOUND.
-    CHECK get_type( ) EQ ir_element->get_type( ).
-
-    DATA: lr_typedescr TYPE REF TO cl_abap_typedescr.
-    lr_typedescr ?= ir_element->get_abap_type( ).
-
-    CHECK mr_descr->type_kind EQ lr_typedescr->type_kind.
-
-    DATA: lr_dref TYPE REF TO data.
-    FIELD-SYMBOLS: <fs_val_src> TYPE any,
-                   <fs_val_dest> TYPE any.
-
-    lr_dref = ir_element->to_dref( ).
-    ASSIGN lr_dref->* TO <fs_val_dest>.
-    ASSIGN mr_value->* TO <fs_val_src>.
-
-    CHECK <fs_val_src> EQ <fs_val_dest>.
-
-  ELSEIF ir_data IS BOUND.
-    RETURN. "not null
-  ENDIF.
-  rv_equal = abap_true.
-ENDMETHOD.
-
-
-METHOD Zif_json_element~get_abap_type.
-  rr_type ?= mr_descr.
-ENDMETHOD.
-
-
-METHOD Zif_json_element~get_type.
-  rv_type = Zif_json_element=>c_type_primitive.
-ENDMETHOD.
-
-
-METHOD Zif_json_element~is_boolean.
-  IF get_primitive_type( ) EQ c_type_primitive_boolean.
-    iv_return = abap_true.
-  ELSE.
-    iv_return = abap_false.
-  ENDIF.
-ENDMETHOD.
-
-
-METHOD Zif_json_element~is_number.
-  IF get_primitive_type( ) EQ c_type_primitive_number.
-    iv_return = abap_true.
-  ELSE.
-    iv_return = abap_false.
-  ENDIF.
-ENDMETHOD.
-
-
-METHOD Zif_json_element~is_string.
-  IF get_primitive_type( ) EQ c_type_primitive_string.
-    iv_return = abap_true.
-  ELSE.
-    iv_return = abap_false.
-  ENDIF.
-ENDMETHOD.
-
-
-METHOD Zif_json_element~to_dref.
-  rr_dref = mr_value.
-ENDMETHOD.
-
-
-METHOD Zif_json_element~to_string.
-  FIELD-SYMBOLS: <fr_val> TYPE any.
-  DATA: lv_str TYPE string.
-
-  rv_string = Zif_json_element=>c_type_null.
-
-  IF mr_value IS NOT BOUND.
-    IF ir_stream IS BOUND.
-      ir_stream->write( rv_string ).
+    IF cv_data IS INITIAL.
+      cv_data = <fv_value>.
     ENDIF.
-    RETURN.
-  ENDIF.
 
-  ASSIGN mr_value->* TO <fr_val>.
-
-  "TODO: need to write conversion for different primitives
+  ENDMETHOD.
 
 
-  CASE mr_descr->type_kind.
-    WHEN cl_abap_typedescr=>typekind_float OR cl_abap_typedescr=>typekind_int OR cl_abap_typedescr=>typekind_int1 OR
-         cl_abap_typedescr=>typekind_int2 OR cl_abap_typedescr=>typekind_packed OR `8`. " TYPEKIND_INT8 -> '8' only from 7.40.
-      IF <fr_val> IS INITIAL.
-        rv_string = `0`.
-      ELSE.
-        MOVE <fr_val> TO rv_string.
-        IF <fr_val> LT 0.
-          SHIFT rv_string RIGHT CIRCULAR.
+  METHOD zif_json_element~as_string.
+    FIELD-SYMBOLS: <fv_value> TYPE any.
+    ASSIGN mr_value->* TO <fv_value>.
+    rv_string = |{ <fv_value> }|.
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~deep_copy.
+*  rv_element = me.
+    FIELD-SYMBOLS: <fs_val> TYPE any.
+
+    ASSIGN mr_value->* TO <fs_val>.
+
+    rv_element ?= zcl_json_primitive=>create( <fs_val> ).
+
+
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~equals.
+    rv_equal = abap_false.
+    IF ir_element IS BOUND.
+      CHECK get_type( ) EQ ir_element->get_type( ).
+
+      DATA: lr_typedescr TYPE REF TO cl_abap_typedescr.
+      lr_typedescr ?= ir_element->get_abap_type( ).
+
+      CHECK mr_descr->type_kind EQ lr_typedescr->type_kind.
+
+      DATA: lr_dref TYPE REF TO data.
+      FIELD-SYMBOLS: <fs_val_src>  TYPE any,
+                     <fs_val_dest> TYPE any.
+
+      lr_dref = ir_element->to_dref( ).
+      ASSIGN lr_dref->* TO <fs_val_dest>.
+      ASSIGN mr_value->* TO <fs_val_src>.
+
+      CHECK <fs_val_src> EQ <fs_val_dest>.
+
+    ELSEIF ir_data IS BOUND.
+      RETURN. "not null
+    ENDIF.
+    rv_equal = abap_true.
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~get_abap_type.
+    rr_type ?= mr_descr.
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~get_type.
+    rv_type = zif_json_element=>c_type_primitive.
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~is_boolean.
+    IF get_primitive_type( ) EQ c_type_primitive_boolean.
+      iv_return = abap_true.
+    ELSE.
+      iv_return = abap_false.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~is_number.
+    IF get_primitive_type( ) EQ c_type_primitive_number.
+      iv_return = abap_true.
+    ELSE.
+      iv_return = abap_false.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~is_string.
+    IF get_primitive_type( ) EQ c_type_primitive_string.
+      iv_return = abap_true.
+    ELSE.
+      iv_return = abap_false.
+    ENDIF.
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~to_dref.
+    rr_dref = mr_value.
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~to_string.
+    FIELD-SYMBOLS: <fr_val> TYPE any.
+    DATA: lv_str TYPE string.
+
+    rv_string = zif_json_element=>c_type_null.
+
+    IF mr_value IS NOT BOUND.
+      IF ir_stream IS BOUND.
+        ir_stream->write( rv_string ).
+      ENDIF.
+      RETURN.
+    ENDIF.
+
+    ASSIGN mr_value->* TO <fr_val>.
+
+    "TODO: need to write conversion for different primitives
+
+
+    CASE mr_descr->type_kind.
+      WHEN cl_abap_typedescr=>typekind_float OR cl_abap_typedescr=>typekind_int OR cl_abap_typedescr=>typekind_int1 OR
+           cl_abap_typedescr=>typekind_int2 OR cl_abap_typedescr=>typekind_packed OR `8`. " TYPEKIND_INT8 -> '8' only from 7.40.
+        IF <fr_val> IS INITIAL.
+          rv_string = `0`.
         ELSE.
-          CONDENSE rv_string.
+          MOVE <fr_val> TO rv_string.
+          IF <fr_val> LT 0.
+            SHIFT rv_string RIGHT CIRCULAR.
+          ELSE.
+            CONDENSE rv_string.
+          ENDIF.
         ENDIF.
-      ENDIF.
-    WHEN cl_abap_typedescr=>typekind_num.
-      IF <fr_val> IS INITIAL.
-        rv_string = `0`.
-      ELSE.
-        MOVE <fr_val> TO rv_string.
-        SHIFT rv_string LEFT DELETING LEADING ` 0`.
-      ENDIF.
-    WHEN cl_abap_typedescr=>typekind_string OR cl_abap_typedescr=>typekind_csequence OR cl_abap_typedescr=>typekind_clike.
-      IF <fr_val> IS INITIAL.
-        rv_string = `""`.
-      ELSE.
-        escape_json <fr_val> rv_string.
-        CONCATENATE `"` rv_string `"` INTO rv_string.
-      ENDIF.
-    WHEN cl_abap_typedescr=>typekind_xstring OR cl_abap_typedescr=>typekind_hex.
-      IF <fr_val> IS INITIAL.
-        rv_string = `""`.
-      ELSE.
-        rv_string = Zcl_json_parser=>xstring_to_string( <fr_val> ).
-        escape_json_inplace rv_string.
-        CONCATENATE `"` rv_string `"` INTO rv_string.
-      ENDIF.
-    WHEN cl_abap_typedescr=>typekind_char.
-      IF mr_descr->output_length EQ 1 AND c_boolean_types CS mr_descr->absolute_name.
-        IF <fr_val> EQ abap_true.
-          rv_string = `true`.                               "#EC NOTEXT
+      WHEN cl_abap_typedescr=>typekind_num.
+        IF <fr_val> IS INITIAL.
+          rv_string = `0`.
         ELSE.
-          rv_string = `false`.                              "#EC NOTEXT
+          MOVE <fr_val> TO rv_string.
+          SHIFT rv_string LEFT DELETING LEADING ` 0`.
         ENDIF.
-      ELSEIF ( mr_descr->output_length EQ 32 OR mr_descr->output_length EQ 16 )
-        AND mr_descr->absolute_name CS '_GUID'.
-        rv_string = `"` && Zcl_json_parser=>xstring_to_string( <fr_val> ) && `"`.
-      ELSE.
-        escape_json <fr_val> rv_string.
-        CONCATENATE `"` rv_string `"` INTO rv_string.
-      ENDIF.
-    WHEN cl_abap_typedescr=>typekind_date.
-      CONCATENATE `"` <fr_val>(4) `-` <fr_val>+4(2) `-` <fr_val>+6(2) `"` INTO rv_string.
-    WHEN cl_abap_typedescr=>typekind_time.
-      CONCATENATE `"` <fr_val>(2) `:` <fr_val>+2(2) `:` <fr_val>+4(2) `"` INTO rv_string.
-    WHEN OTHERS.
-      IF <fr_val> IS INITIAL.
-        rv_string = `null`.                                 "#EC NOTEXT
-      ELSE.
-        MOVE <fr_val> TO rv_string.
-      ENDIF.
-  ENDCASE.
+      WHEN cl_abap_typedescr=>typekind_string OR cl_abap_typedescr=>typekind_csequence OR cl_abap_typedescr=>typekind_clike.
+        IF <fr_val> IS INITIAL.
+          rv_string = `""`.
+        ELSE.
+          escape_json <fr_val> rv_string.
+          CONCATENATE `"` rv_string `"` INTO rv_string.
+        ENDIF.
+      WHEN cl_abap_typedescr=>typekind_xstring OR cl_abap_typedescr=>typekind_hex.
+        IF <fr_val> IS INITIAL.
+          rv_string = `""`.
+        ELSE.
+          rv_string = zcl_json_parser=>xstring_to_string( <fr_val> ).
+          escape_json_inplace rv_string.
+          CONCATENATE `"` rv_string `"` INTO rv_string.
+        ENDIF.
+      WHEN cl_abap_typedescr=>typekind_char.
+        IF mr_descr->output_length EQ 1 AND c_boolean_types CS mr_descr->absolute_name.
+          IF <fr_val> EQ abap_true.
+            rv_string = `true`.                             "#EC NOTEXT
+          ELSE.
+            rv_string = `false`.                            "#EC NOTEXT
+          ENDIF.
+        ELSEIF ( mr_descr->output_length EQ 32 OR mr_descr->output_length EQ 16 )
+          AND mr_descr->absolute_name CS '_GUID'.
+          rv_string = `"` && zcl_json_parser=>xstring_to_string( <fr_val> ) && `"`.
+        ELSE.
+          escape_json <fr_val> rv_string.
+          CONCATENATE `"` rv_string `"` INTO rv_string.
+        ENDIF.
+      WHEN cl_abap_typedescr=>typekind_date.
+        CONCATENATE `"` <fr_val>(4) `-` <fr_val>+4(2) `-` <fr_val>+6(2) `"` INTO rv_string.
+      WHEN cl_abap_typedescr=>typekind_time.
+        CONCATENATE `"` <fr_val>(2) `:` <fr_val>+2(2) `:` <fr_val>+4(2) `"` INTO rv_string.
+      WHEN OTHERS.
+        IF <fr_val> IS INITIAL.
+          rv_string = `null`.                               "#EC NOTEXT
+        ELSE.
+          MOVE <fr_val> TO rv_string.
+        ENDIF.
+    ENDCASE.
 
 *  CASE mr_descr->type_kind.
 *
@@ -701,9 +730,9 @@ METHOD Zif_json_element~to_string.
 *      rv_string = |"{ <fr_val> }"|.
 *
 *  ENDCASE.
-  IF ir_stream IS BOUND.
-    ir_stream->write( rv_string ).
-  ENDIF.
+    IF ir_stream IS BOUND.
+      ir_stream->write( rv_string ).
+    ENDIF.
 
-ENDMETHOD.
+  ENDMETHOD.
 ENDCLASS.

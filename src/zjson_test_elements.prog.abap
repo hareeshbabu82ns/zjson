@@ -13,12 +13,40 @@ REPORT zjson_test_elements.
 *PERFORM test_parser.
 
 *PERFORM test_json_element.
-PERFORM test_json_object.
+*PERFORM test_json_object.
 *PERFORM test_json_array.
 *PERFORM test_json_array_builder.
 *PERFORM test_streams.
 
+DATA : lv_ts_6             TYPE p LENGTH 6,
+       lv_timezone_sec(5)  TYPE p VALUE '0',
+       lv_timezone_name(7) TYPE c,
+       lv_date             TYPE dats VALUE '20190426',
+       lv_time             TYPE t VALUE '003504',
+       lv_time_str(8)      TYPE c.
 
+
+DATA tsl TYPE timestampl.
+
+GET TIME STAMP FIELD DATA(ts).
+GET TIME STAMP FIELD tsl.
+
+WRITE: / 'Syst - ' , |{ ts  TIMESTAMP = ISO TIMEZONE = 'MDT' }Z|.
+WRITE: / 'Syst - ' , |{ tsl  TIMESTAMP = ISO TIMEZONE = 'MDT' }Z|.
+
+WRITE: / 'Date - ', sy-datum, ' - Time - ', sy-uzeit.
+WRITE: / 'TimeZone - ', cl_abap_tstmp=>get_system_timezone( ).
+cl_abap_tstmp=>systemtstmp_syst2utc( EXPORTING syst_date = sy-datum syst_time = sy-uzeit IMPORTING utc_tstmp = ts  ).
+WRITE: / 'UTC - ', ts , ' => ' , |{ ts  TIMESTAMP = ISO }Z|.
+cl_abap_tstmp=>systemtstmp_utc2syst( EXPORTING utc_tstmp = ts IMPORTING syst_date = lv_date syst_time = lv_time ).
+WRITE: / 'Date - ', lv_date, ' - Time - ', lv_time.
+
+
+*cl_demo_output=>new(
+*
+*  )->write( |{ tsl TIMESTAMP = ISO
+*                   TIMEZONE = 'UTC' }|
+*  )->display( ).
 
 FORM test_parser.
 
@@ -152,7 +180,7 @@ FORM test_streams.
 
   CREATE OBJECT lr_array
     EXPORTING
-      it_table = lt_strings.
+      it_data = lt_strings.
 
   lv_final_string = lr_array->to_string( ).
 

@@ -63,6 +63,8 @@ interface ZIF_JSON_ELEMENT
   methods AS_DATA
     importing
       !IS_COMP_ATTRS type ABAP_COMPDESCR optional
+      value(IT_NAMES_MAP) type ZJSON_NAME_VALUE_TAB optional
+      value(IV_MAP_IGNORE_REST) type ABAP_BOOL default ABAP_FALSE
     changing
       value(CV_DATA) type ANY .
   methods IS_OBJECT_ATTRIBUTE

@@ -27,25 +27,27 @@ CLASS ztest_json_primitive DEFINITION FOR TESTING
   PRIVATE SECTION.
 * ================
     DATA:
-      r_primitive   TYPE REF TO zcl_json_primitive,  "class under test
-      r_prim        TYPE REF TO zcl_json_primitive,
-      v_equal       TYPE abap_bool,
-      v_int         TYPE i VALUE 223444889,
-      v_int_str     TYPE string VALUE '223444889',
-      v_nint        TYPE i VALUE -847,
-      v_nint_str    TYPE string VALUE '-847',
-      v_big_int     TYPE p LENGTH 12 DECIMALS 0 VALUE 9484782749,
-      v_big_int_str TYPE string VALUE '9484782749',
-      v_float       TYPE p LENGTH 6 DECIMALS 4 VALUE '1234567.88',
-      v_float_str   TYPE string VALUE '1234567.8800',
-      v_nfloat      TYPE p LENGTH 14 DECIMALS 4 VALUE '4792844.489-',
-      v_nfloat_str  TYPE string VALUE '-4792844.4890',
-      v_string      TYPE string VALUE 'some string goes here',
-      v_string_str  TYPE string VALUE '"some string goes here"',
-      v_bool        TYPE abap_bool VALUE abap_true,
-      v_bool_str    TYPE string VALUE 'true',
-      v_data        TYPE bu_partner VALUE '9484849382',
-      v_data_str    TYPE string VALUE '"9484849382"'.
+      r_primitive     TYPE REF TO zcl_json_primitive,  "class under test
+      r_prim          TYPE REF TO zcl_json_primitive,
+      v_equal         TYPE abap_bool,
+      v_int           TYPE i VALUE 223444889,
+      v_int_str       TYPE string VALUE '223444889',
+      v_nint          TYPE i VALUE -847,
+      v_nint_str      TYPE string VALUE '-847',
+      v_big_int       TYPE p LENGTH 12 DECIMALS 0 VALUE 9484782749,
+      v_big_int_str   TYPE string VALUE '9484782749',
+      v_float         TYPE p LENGTH 6 DECIMALS 4 VALUE '1234567.88',
+      v_float_str     TYPE string VALUE '1234567.8800',
+      v_nfloat        TYPE p LENGTH 14 DECIMALS 4 VALUE '4792844.489-',
+      v_nfloat_str    TYPE string VALUE '-4792844.4890',
+      v_string        TYPE string VALUE 'some string goes here',
+      v_string_str    TYPE string VALUE '"some string goes here"',
+      v_bool          TYPE abap_bool VALUE abap_true,
+      v_bool_str      TYPE string VALUE 'true',
+      v_data          TYPE bu_partner VALUE '9484849382',
+      v_data_str      TYPE string VALUE '"9484849382"',
+      v_timestamp     TYPE timestamp VALUE '20141220203504',
+      v_timestamp_str TYPE string VALUE '"2014-12-20T20:35:04.260000Z"'.
 
 
     CLASS-METHODS: class_setup.
@@ -82,7 +84,8 @@ CLASS ztest_json_primitive IMPLEMENTATION.
 
   METHOD setup.
 * =============
-
+    GET TIME STAMP FIELD v_timestamp.
+    v_timestamp_str = v_timestamp.
 *    CREATE OBJECT f_cut.
   ENDMETHOD.       "setup
 
@@ -270,6 +273,41 @@ CLASS ztest_json_primitive IMPLEMENTATION.
       msg   = 'String Conversion failed'
     ).
 *--------------------------------------------------------------------*
+
+    r_primitive = zcl_json_primitive=>from_string( v_timestamp_str ).
+
+    r_prim = zcl_json_primitive=>create( v_timestamp ).
+
+    v_equal = r_prim->equals( ir_element = r_primitive ).
+
+    cl_abap_unit_assert=>assert_true(
+      act   = v_equal
+      msg   = 'Timestamp Conversion failed'
+    ).
+
+    DATA: ts TYPE timestamp.
+
+    v_timestamp = '20190426034852'.
+    v_timestamp_str = '2019-04-26T01:48:52.260000Z'.
+
+    GET TIME STAMP FIELD v_timestamp.
+
+    cl_abap_tstmp=>systemtstmp_syst2utc( EXPORTING syst_date = sy-datum syst_time = sy-uzeit
+        IMPORTING utc_tstmp = ts  ).
+
+    v_timestamp_str = |{ ts  TIMESTAMP = ISO }Z| .
+
+    r_primitive = zcl_json_primitive=>from_string( v_timestamp_str ).
+
+    r_prim = zcl_json_primitive=>create( v_timestamp ).
+
+    v_equal = r_prim->equals( ir_element = r_primitive ).
+
+    cl_abap_unit_assert=>assert_true(
+      act   = v_equal
+      msg   = 'Timestamp Conversion failed'
+    ).
+*--------------------------------------------------------------------*
   ENDMETHOD.                    "from_string
 
   METHOD to_string.
@@ -393,6 +431,20 @@ CLASS ztest_json_primitive IMPLEMENTATION.
       act   = rv_string
       exp   = 'null'
       msg   = 'Null Conversion failed'
+    ).
+
+*--------------------------------------------------------------------*
+    r_primitive = zcl_json_primitive=>create( v_timestamp ).
+
+    rv_string = r_primitive->to_string( ).
+
+    CONDENSE rv_string.
+    CONDENSE v_timestamp_str.
+
+    cl_abap_unit_assert=>assert_equals(
+      act   = rv_string
+      exp   = v_timestamp_str
+      msg   = 'Time Stamp Conversion failed'
     ).
 
   ENDMETHOD.       "to_String

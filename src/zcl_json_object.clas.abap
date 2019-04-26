@@ -5,6 +5,7 @@ class ZCL_JSON_OBJECT definition
   create public .
 
 public section.
+  type-pools ABAP .
 
   methods ADD
     importing
@@ -16,7 +17,6 @@ public section.
       !IV_NAME type STRING
     returning
       value(RR_ELEMENT) type ref to ZIF_JSON_ELEMENT .
-  type-pools ABAP .
   methods HAS
     importing
       !IV_NAME type STRING
@@ -27,6 +27,11 @@ public section.
       !IV_NAME type STRING
     returning
       value(RR_ELEMENT) type ref to ZIF_JSON_ELEMENT .
+  methods CONSTRUCTOR
+    importing
+      value(IS_DATA) type ANY optional
+      value(IT_NAMES_MAP) type ZJSON_NAME_VALUE_TAB optional
+      value(IV_MAP_IGNORE_REST) type ABAP_BOOL default ABAP_FALSE .
 
   methods ZIF_JSON_ELEMENT~DEEP_COPY
     redefinition .
@@ -48,13 +53,15 @@ public section.
     redefinition .
   methods ZIF_JSON_ITERATOR~GET_FIRST
     redefinition .
+  methods ZIF_JSON_ITERATOR~GET_LAST
+    redefinition .
   methods ZIF_JSON_ITERATOR~GET_NEXT
     redefinition .
   methods ZIF_JSON_ITERATOR~GET_PREVIOUS
     redefinition .
   methods ZIF_JSON_ITERATOR~SIZE
     redefinition .
-  methods ZIF_JSON_ITERATOR~GET_LAST
+  methods ZIF_JSON_ELEMENT~AS_DATA
     redefinition .
 protected section.
 private section.
@@ -95,6 +102,73 @@ METHOD add.
 ENDMETHOD.
 
 
+  METHOD constructor.
+
+    super->constructor( ).
+
+    CHECK is_data IS NOT INITIAL.
+
+    DATA:
+      lr_structdesc TYPE REF TO cl_abap_structdescr,
+      lr_cxroot     TYPE REF TO cx_root.
+
+    DATA:
+      lt_fields TYPE abap_component_tab,
+      lv_str    TYPE string.
+
+    FIELD-SYMBOLS:
+      <fv_value>    TYPE any,
+      <fs_name_map> TYPE zjson_name_value_str,
+      <fs_field>    TYPE abap_componentdescr.
+
+
+    TRY .
+        lr_structdesc ?= cl_abap_structdescr=>describe_by_data( is_data ).
+
+        lt_fields = lr_structdesc->get_components( ).
+
+        LOOP AT lt_fields ASSIGNING <fs_field>.
+          ASSIGN COMPONENT <fs_field>-name OF STRUCTURE is_data TO <fv_value>.
+          CHECK sy-subrc IS INITIAL.
+
+          "find the name map to json name
+          READ TABLE it_names_map WITH KEY name = <fs_field>-name
+              ASSIGNING <fs_name_map>.
+          IF sy-subrc IS INITIAL.
+            "name mapping found
+
+            IF <fs_name_map>-value IS INITIAL.
+              " mapping is missing use prittyfied name as map
+              lv_str = zcl_json=>pretty_name( <fs_field>-name ).
+*              " mapping is initial so omit this field from output
+*              CONTINUE.
+            ELSE.
+              " mapping found
+              lv_str = <fs_name_map>-value.
+            ENDIF.
+          ELSEIF iv_map_ignore_rest EQ abap_true.
+            CONTINUE. "omit field (strict mapping mode)
+          ELSE.
+            lv_str = zcl_json=>pretty_name( <fs_field>-name ).
+          ENDIF.
+
+          me->add(
+            EXPORTING
+              iv_name    = lv_str
+*              ir_element =
+              iv_value   = <fv_value>
+          ).
+
+        ENDLOOP.
+
+      CATCH cx_root INTO lr_cxroot.
+        " Not a Valid Structure Type
+        zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Structure' previous = lr_cxroot ).
+    ENDTRY.
+
+  ENDMETHOD.
+
+
 METHOD get.
   FIELD-SYMBOLS: <fs_member> LIKE LINE OF mt_members.
 
@@ -132,6 +206,71 @@ METHOD remove.
   ENDIF.
 
 ENDMETHOD.
+
+
+  METHOD zif_json_element~as_data.
+    DATA:
+      lr_structdesc TYPE REF TO cl_abap_structdescr,
+      lr_cxroot     TYPE REF TO cx_root.
+
+    DATA:
+      lt_fields TYPE abap_component_tab,
+      lv_str    TYPE string.
+
+    FIELD-SYMBOLS:
+      <fv_value>    TYPE any,
+      <fs_obj_attr> TYPE zjson_name_element_str,
+      <fs_name_map> TYPE zjson_name_value_str,
+      <fs_field>    TYPE abap_compdescr.
+
+
+    TRY .
+        lr_structdesc ?= cl_abap_structdescr=>describe_by_data( cv_data ).
+
+        LOOP AT lr_structdesc->components ASSIGNING <fs_field>.
+          ASSIGN COMPONENT <fs_field>-name OF STRUCTURE cv_data TO <fv_value>.
+          CHECK sy-subrc IS INITIAL.
+
+          "find the name map to json name
+          READ TABLE it_names_map WITH KEY name = <fs_field>-name
+              ASSIGNING <fs_name_map>.
+          IF sy-subrc IS INITIAL.
+            "name mapping found
+
+            IF <fs_name_map>-value IS INITIAL.
+              lv_str = zcl_json=>pretty_name( <fs_field>-name ).
+            ELSE.
+              lv_str = <fs_name_map>-value.
+            ENDIF.
+*            IF <fs_name_map>-value IS INITIAL.
+*              " mapping is initial so omit this field from output
+*              CONTINUE.
+*            ELSE.
+            " mapping found
+            READ TABLE mt_members WITH KEY name = lv_str
+                ASSIGNING <fs_obj_attr>.
+            IF sy-subrc IS INITIAL.
+              <fs_obj_attr>-value->as_data( EXPORTING is_comp_attrs = <fs_field> CHANGING cv_data =  <fv_value> ).
+            ENDIF.
+*            ENDIF.
+          ELSEIF iv_map_ignore_rest EQ abap_true.
+            CONTINUE. "omit field (strict mapping mode)
+          ELSE.
+            lv_str = zcl_json=>pretty_name( <fs_field>-name ).
+            READ TABLE mt_members WITH KEY name = lv_str
+                ASSIGNING <fs_obj_attr>.
+            IF sy-subrc IS INITIAL.
+              <fs_obj_attr>-value->as_data( EXPORTING is_comp_attrs = <fs_field> CHANGING cv_data =  <fv_value> ).
+            ENDIF.
+          ENDIF.
+
+        ENDLOOP.
+
+      CATCH cx_root INTO lr_cxroot.
+        " Not a Valid Structure Type
+        zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Structure' previous = lr_cxroot ).
+    ENDTRY.
+  ENDMETHOD.
 
 
 METHOD Zif_json_element~deep_copy.

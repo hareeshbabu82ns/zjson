@@ -1,3 +1,4 @@
+"! <p class="shorttext synchronized" lang="en">JSON Utility Class</p>
 class ZCL_JSON_UTIL definition
   public
   final
@@ -14,7 +15,23 @@ public section.
       !IV_DEFAULT type ANY default ''
     returning
       value(RR_JSON_ELEMENT) type ref to ZIF_JSON_ELEMENT .
+      "! <p class="shorttext synchronized" lang="en">Map JSON Element to ABAP Structure or Internal Table</p>
+  class-methods CAST_TO_ABAP
+    importing
+      !IR_JSON_ELE type ref to ZIF_JSON_ELEMENT
+    changing
+      !C_DATA type ref to DATA .
   class-methods CLASS_CONSTRUCTOR .
+  class-methods CONVERT_ATIMESTAMP_UTC_JSON
+    importing
+      value(IV_TIMESTAMP) type TIMESTAMP optional
+    returning
+      value(RV_JSON_UTC_TIMESTAMP) type STRING .
+  class-methods CONVERT_JSON_UTC_ATIMESTAMP
+    importing
+      value(IV_JSON_UTC_TIMESTAMP) type STRING
+    returning
+      value(RV_TIMESTAMP) type TIMESTAMP .
   PROTECTED SECTION.
   PRIVATE SECTION.
 ENDCLASS.
@@ -24,12 +41,73 @@ ENDCLASS.
 CLASS ZCL_JSON_UTIL IMPLEMENTATION.
 
 
+  METHOD cast_to_abap.
+
+  ENDMETHOD.
+
+
   METHOD class_constructor.
 
     "matches <name>[<index>], subMatch1 -> name, subMatch2 -> index
     CREATE OBJECT gr_array_index_matcher
       EXPORTING
         pattern = '(^\D\w*)\[(\d*)\]'.
+
+  ENDMETHOD.
+
+
+  METHOD convert_atimestamp_utc_json.
+
+    DATA: lv_date      TYPE d,
+          lv_time      TYPE t,
+          lv_str       TYPE string,
+          lv_timestamp TYPE timestamp.
+
+    IF iv_timestamp IS INITIAL.
+      GET TIME STAMP FIELD lv_timestamp.
+    ELSE.
+      lv_timestamp = iv_timestamp.
+    ENDIF.
+
+    CONVERT TIME STAMP lv_timestamp TIME ZONE 'UTC' "cl_abap_tstmp=>get_system_timezone( )
+        INTO DATE lv_date TIME lv_time.
+
+    cl_abap_tstmp=>systemtstmp_syst2utc( EXPORTING syst_date = lv_date syst_time = lv_time
+      IMPORTING utc_tstmp = lv_timestamp  ).
+
+    "json utc timestamp 2014-12-20T20:35:04Z
+    rv_json_utc_timestamp = |{ lv_timestamp  TIMESTAMP = ISO }Z|.
+
+  ENDMETHOD.
+
+
+  METHOD convert_json_utc_atimestamp.
+
+    DATA: lr_matcher   TYPE REF TO cl_abap_matcher,
+          lv_date      TYPE d,
+          lv_time      TYPE t,
+          lv_str       TYPE string,
+          lv_timestamp TYPE timestamp.
+
+    "check for json utc timestamp 2014-12-20T20:35:04.260000Z
+    lr_matcher = zcl_json_primitive=>mv_regex_json_utc_timestamp->create_matcher( text = iv_json_utc_timestamp ).
+    IF lr_matcher IS BOUND AND lr_matcher->match( ) IS NOT INITIAL.
+      CLEAR lv_str.
+      lv_str = iv_json_utc_timestamp(4) && iv_json_utc_timestamp+5(2)
+                          && iv_json_utc_timestamp+8(2) &&  iv_json_utc_timestamp+11(2)
+                          &&  iv_json_utc_timestamp+14(2) &&  iv_json_utc_timestamp+17(2).
+
+      " get UTC timestamp
+      MOVE lv_str TO lv_timestamp.
+
+      " convert to system date and time
+      cl_abap_tstmp=>systemtstmp_utc2syst( EXPORTING utc_tstmp = lv_timestamp
+          IMPORTING syst_date = lv_date syst_time = lv_time ).
+
+      " convert to system timestamp
+      CONVERT TIME lv_time DATE lv_date INTO TIME STAMP rv_timestamp
+            TIME ZONE 'UTC'.
+    ENDIF.
 
   ENDMETHOD.
 
