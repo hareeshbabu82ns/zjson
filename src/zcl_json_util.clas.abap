@@ -1,44 +1,52 @@
 "! <p class="shorttext synchronized" lang="en">JSON Utility Class</p>
-class ZCL_JSON_UTIL definition
-  public
-  final
-  create public .
+CLASS zcl_json_util DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
 
-public section.
+  PUBLIC SECTION.
 
-  class-data GR_ARRAY_INDEX_MATCHER type ref to CL_ABAP_REGEX read-only .
+    CLASS-DATA gr_array_index_matcher TYPE REF TO cl_abap_regex READ-ONLY .
 
-  class-methods GET
-    importing
-      !IR_JSON_OBJECT type ref to ZIF_JSON_ELEMENT
-      !IV_PATH type STRING
-      !IV_DEFAULT type ANY default ''
-    returning
-      value(RR_JSON_ELEMENT) type ref to ZIF_JSON_ELEMENT .
-      "! <p class="shorttext synchronized" lang="en">Map JSON Element to ABAP Structure or Internal Table</p>
-  class-methods CAST_TO_ABAP
-    importing
-      !IR_JSON_ELE type ref to ZIF_JSON_ELEMENT
-    changing
-      !C_DATA type ref to DATA .
-  class-methods CLASS_CONSTRUCTOR .
-  class-methods CONVERT_ATIMESTAMP_UTC_JSON
-    importing
-      value(IV_TIMESTAMP) type TIMESTAMP optional
-    returning
-      value(RV_JSON_UTC_TIMESTAMP) type STRING .
-  class-methods CONVERT_JSON_UTC_ATIMESTAMP
-    importing
-      value(IV_JSON_UTC_TIMESTAMP) type STRING
-    returning
-      value(RV_TIMESTAMP) type TIMESTAMP .
+    CLASS-METHODS get
+      IMPORTING
+        !ir_json_object        TYPE REF TO zif_json_element
+        !iv_path               TYPE string
+        !iv_default            TYPE any DEFAULT ''
+      RETURNING
+        VALUE(rr_json_element) TYPE REF TO zif_json_element .
+    "! <p class="shorttext synchronized" lang="en">Map JSON Element to ABAP Structure or Internal Table</p>
+    CLASS-METHODS cast_to_abap
+      IMPORTING
+        !ir_json_ele TYPE REF TO zif_json_element
+      CHANGING
+        !c_data      TYPE REF TO data .
+    CLASS-METHODS class_constructor .
+    CLASS-METHODS convert_atimestamp_utc_json
+      IMPORTING
+        VALUE(iv_timestamp)          TYPE timestamp OPTIONAL
+      RETURNING
+        VALUE(rv_json_utc_timestamp) TYPE string .
+    CLASS-METHODS convert_json_utc_atimestamp
+      IMPORTING
+        VALUE(iv_json_utc_timestamp) TYPE string
+      RETURNING
+        VALUE(rv_timestamp)          TYPE timestamp .
+
+
+    CLASS-METHODS prettify_abap_name
+      IMPORTING
+        !iv_abap_name       TYPE string
+      RETURNING
+        VALUE(rv_json_name) TYPE string.
+
   PROTECTED SECTION.
   PRIVATE SECTION.
 ENDCLASS.
 
 
 
-CLASS ZCL_JSON_UTIL IMPLEMENTATION.
+CLASS zcl_json_util IMPLEMENTATION.
 
 
   METHOD cast_to_abap.
@@ -55,6 +63,25 @@ CLASS ZCL_JSON_UTIL IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD prettify_abap_name.
+
+    DATA: tokens TYPE TABLE OF char128.
+    FIELD-SYMBOLS: <token> LIKE LINE OF tokens.
+
+    rv_json_name = iv_abap_name.
+
+    TRANSLATE rv_json_name TO LOWER CASE.
+    TRANSLATE rv_json_name USING `/_:_~_`.
+    SPLIT rv_json_name AT `_` INTO TABLE tokens.
+    DELETE tokens WHERE table_line IS INITIAL.
+    LOOP AT tokens ASSIGNING <token> FROM 2.
+      TRANSLATE <token>(1) TO UPPER CASE.
+    ENDLOOP.
+
+    CONCATENATE LINES OF tokens INTO rv_json_name.
+
+
+  ENDMETHOD.
 
   METHOD convert_atimestamp_utc_json.
 
