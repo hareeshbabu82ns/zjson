@@ -1,75 +1,75 @@
-class ZCL_JSON_PRIMITIVE definition
-  public
-  inheriting from ZCL_JSON_ELEMENT
-  final
-  create public .
+CLASS zcl_json_primitive DEFINITION
+  PUBLIC
+  INHERITING FROM zcl_json_element
+  FINAL
+  CREATE PUBLIC .
 
-public section.
-  type-pools ABAP .
-  class CL_ABAP_MATH definition load .
+  PUBLIC SECTION.
+    TYPE-POOLS abap .
+    CLASS cl_abap_math DEFINITION LOAD .
 
-  class-data GT_PREMITIVES type ABAP_COMPONENT_TAB read-only .
-  class-data GC_INT2_MAX type I value 32767 ##NO_TEXT.
-  class-data GC_INT4_MAX type I value CL_ABAP_MATH=>MAX_INT4 ##NO_TEXT.
-  class-data C_BOOLEAN_TYPES type STRING value `\TYPE-POOL=ABAP\TYPE=ABAP_BOOL#\TYPE=BOOLEAN#\TYPE=BOOLE_D#\TYPE=XFELD` ##NO_TEXT.
-  class-data MV_REGEX_NUMBER type ref to CL_ABAP_REGEX read-only .
-  class-data MV_REGEX_JSON_UTC_TIMESTAMP type ref to CL_ABAP_REGEX read-only .
+    CLASS-DATA gt_premitives TYPE abap_component_tab READ-ONLY .
+    CLASS-DATA gc_int2_max TYPE i VALUE 32767 ##NO_TEXT.
+    CLASS-DATA gc_int4_max TYPE i VALUE cl_abap_math=>max_int4 ##NO_TEXT.
+    CLASS-DATA c_boolean_types TYPE string VALUE `\TYPE-POOL=ABAP\TYPE=ABAP_BOOL#\TYPE=BOOLEAN#\TYPE=BOOLE_D#\TYPE=XFELD` ##NO_TEXT.
+    CLASS-DATA mv_regex_number TYPE REF TO cl_abap_regex READ-ONLY .
+    CLASS-DATA mv_regex_json_utc_timestamp TYPE REF TO cl_abap_regex READ-ONLY .
 
-  methods CONSTRUCTOR
-    importing
-      !IR_VALUE type ANY .
-  methods GET_PRIMITIVE_TYPE
-    returning
-      value(RV_KIND) type INT1 .
-  methods SET_VALUE
-    importing
-      !IR_VALUE type ANY .
-  class-methods CLASS_CONSTRUCTOR .
-  class-methods CREATE
-    importing
-      !IV_DATA type ANY
-    returning
-      value(RR_PRIMITIVE) type ref to ZCL_JSON_PRIMITIVE .
-  class-methods FROM_STRING
-    importing
-      !IV_STRING type STRING
-    returning
-      value(RR_PRIMITIVE) type ref to ZCL_JSON_PRIMITIVE .
+    METHODS constructor
+      IMPORTING
+        !ir_value TYPE any .
+    METHODS get_primitive_type
+      RETURNING
+        VALUE(rv_kind) TYPE int1 .
+    METHODS set_value
+      IMPORTING
+        !ir_value TYPE any .
+    CLASS-METHODS class_constructor .
+    CLASS-METHODS create
+      IMPORTING
+        !iv_data            TYPE any
+      RETURNING
+        VALUE(rr_primitive) TYPE REF TO zcl_json_primitive .
+    CLASS-METHODS from_string
+      IMPORTING
+        !iv_string          TYPE string
+      RETURNING
+        VALUE(rr_primitive) TYPE REF TO zcl_json_primitive .
 
-  methods ZIF_JSON_ELEMENT~AS_DATA
-    redefinition .
-  methods ZIF_JSON_ELEMENT~AS_STRING
-    redefinition .
-  methods ZIF_JSON_ELEMENT~DEEP_COPY
-    redefinition .
-  methods ZIF_JSON_ELEMENT~EQUALS
-    redefinition .
-  methods ZIF_JSON_ELEMENT~GET_ABAP_TYPE
-    redefinition .
-  methods ZIF_JSON_ELEMENT~GET_TYPE
-    redefinition .
-  methods ZIF_JSON_ELEMENT~IS_BOOLEAN
-    redefinition .
-  methods ZIF_JSON_ELEMENT~IS_NUMBER
-    redefinition .
-  methods ZIF_JSON_ELEMENT~IS_STRING
-    redefinition .
-  methods ZIF_JSON_ELEMENT~TO_DREF
-    redefinition .
-  methods ZIF_JSON_ELEMENT~TO_STRING
-    redefinition .
+    METHODS zif_json_element~as_data
+        REDEFINITION .
+    METHODS zif_json_element~as_string
+        REDEFINITION .
+    METHODS zif_json_element~deep_copy
+        REDEFINITION .
+    METHODS zif_json_element~equals
+        REDEFINITION .
+    METHODS zif_json_element~get_abap_type
+        REDEFINITION .
+    METHODS zif_json_element~get_type
+        REDEFINITION .
+    METHODS zif_json_element~is_boolean
+        REDEFINITION .
+    METHODS zif_json_element~is_number
+        REDEFINITION .
+    METHODS zif_json_element~is_string
+        REDEFINITION .
+    METHODS zif_json_element~to_dref
+        REDEFINITION .
+    METHODS zif_json_element~to_string
+        REDEFINITION .
   PROTECTED SECTION.
-private section.
+  PRIVATE SECTION.
 
-  data MR_VALUE type ref to DATA .
-  data MR_DESCR type ref to CL_ABAP_ELEMDESCR .
+    DATA mr_value TYPE REF TO data .
+    DATA mr_descr TYPE REF TO cl_abap_elemdescr .
 
-  class-methods PREPARE_PREMITIVE_DESCRIPTORS .
+    CLASS-METHODS prepare_premitive_descriptors .
 ENDCLASS.
 
 
 
-CLASS ZCL_JSON_PRIMITIVE IMPLEMENTATION.
+CLASS zcl_json_primitive IMPLEMENTATION.
 
 
   METHOD class_constructor.
@@ -177,6 +177,13 @@ CLASS ZCL_JSON_PRIMITIVE IMPLEMENTATION.
 
   METHOD get_primitive_type.
 
+    DATA: lv_type_name  TYPE string,
+          lv_field_name TYPE fieldname.
+
+    IF mr_descr->is_ddic_type( ) = abap_true.
+      data(ls_field) = mr_descr->get_ddic_field( ).
+    ENDIF.
+
     CASE mr_descr->type_kind.
 
       WHEN cl_abap_typedescr=>typekind_string OR
@@ -203,7 +210,8 @@ CLASS ZCL_JSON_PRIMITIVE IMPLEMENTATION.
       WHEN cl_abap_typedescr=>typekind_char.
 
         IF mr_descr->absolute_name CS 'ABAP_BOOL' OR
-          mr_descr->absolute_name CS 'BOOLEAN'.
+          mr_descr->absolute_name CS 'BOOLEAN' OR
+          ls_field-domname CS 'BOOLEAN'.
           rv_kind = c_type_primitive_boolean.
         ELSE.
           rv_kind = c_type_primitive_string.
@@ -590,7 +598,11 @@ CLASS ZCL_JSON_PRIMITIVE IMPLEMENTATION.
 
   METHOD zif_json_element~to_string.
     FIELD-SYMBOLS: <fr_val> TYPE any.
-    DATA: lv_str TYPE string.
+    DATA: lv_str   TYPE string.
+
+    IF mr_descr->is_ddic_type( ) = abap_true.
+      data(ls_field) = mr_descr->get_ddic_field( ).
+    ENDIF.
 
     rv_string = zif_json_element=>c_type_null.
 
@@ -642,11 +654,15 @@ CLASS ZCL_JSON_PRIMITIVE IMPLEMENTATION.
           CONCATENATE `"` rv_string `"` INTO rv_string.
         ENDIF.
       WHEN cl_abap_typedescr=>typekind_char.
-        IF mr_descr->output_length EQ 1 AND c_boolean_types CS mr_descr->absolute_name.
+        IF mr_descr->output_length EQ 1 AND
+            ( c_boolean_types CS mr_descr->absolute_name OR
+               c_boolean_types CS  ls_field-domname ).
           IF <fr_val> EQ abap_true.
             rv_string = `true`.                             "#EC NOTEXT
-          ELSE.
+          ELSEIF <fr_val> EQ abap_false.
             rv_string = `false`.                            "#EC NOTEXT
+          ELSE.
+            rv_string = `null`.                             "#EC NOTEXT
           ENDIF.
         ELSEIF ( mr_descr->output_length EQ 32 OR mr_descr->output_length EQ 16 )
           AND mr_descr->absolute_name CS '_GUID'.
