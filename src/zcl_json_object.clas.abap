@@ -7,6 +7,8 @@ class ZCL_JSON_OBJECT definition
 public section.
   type-pools ABAP .
 
+  data MT_MEMBERS type ZJSON_NAME_ELEMENT_TAB read-only .
+
   methods ADD
     importing
       !IV_NAME type STRING
@@ -33,6 +35,8 @@ public section.
       value(IT_NAMES_MAP) type ZJSON_NAME_VALUE_TAB optional
       value(IV_MAP_IGNORE_REST) type ABAP_BOOL default ABAP_FALSE .
 
+  methods ZIF_JSON_ELEMENT~AS_DATA
+    redefinition .
   methods ZIF_JSON_ELEMENT~DEEP_COPY
     redefinition .
   methods ZIF_JSON_ELEMENT~EQUALS
@@ -61,12 +65,10 @@ public section.
     redefinition .
   methods ZIF_JSON_ITERATOR~SIZE
     redefinition .
-  methods ZIF_JSON_ELEMENT~AS_DATA
+  methods ZIF_JSON_ELEMENT~AS_STRING
     redefinition .
 protected section.
 private section.
-
-  data MT_MEMBERS type ZJSON_NAME_ELEMENT_TAB .
 ENDCLASS.
 
 
@@ -270,6 +272,11 @@ ENDMETHOD.
         " Not a Valid Structure Type
         zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Structure' previous = lr_cxroot ).
     ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~as_string.
+    rv_string = to_string( ).
   ENDMETHOD.
 
 

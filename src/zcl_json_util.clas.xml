@@ -31,6 +31,12 @@
      <LANGU>E</LANGU>
      <DESCRIPT>Convert JSON UTC ISO String to ABAP System Timestamp</DESCRIPT>
     </SEOCOMPOTX>
+    <SEOCOMPOTX>
+     <CLSNAME>ZCL_JSON_UTIL</CLSNAME>
+     <CMPNAME>GR_ARRAY_INDEX_ATTR_MATCHER</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>Regular Expressions</DESCRIPT>
+    </SEOCOMPOTX>
    </DESCRIPTIONS>
   </asx:values>
  </asx:abap>

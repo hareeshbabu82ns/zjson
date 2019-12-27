@@ -1,52 +1,50 @@
 "! <p class="shorttext synchronized" lang="en">JSON Utility Class</p>
-CLASS zcl_json_util DEFINITION
-  PUBLIC
-  FINAL
-  CREATE PUBLIC .
+class ZCL_JSON_UTIL definition
+  public
+  final
+  create public .
 
-  PUBLIC SECTION.
+public section.
 
-    CLASS-DATA gr_array_index_matcher TYPE REF TO cl_abap_regex READ-ONLY .
+  class-data GR_ARRAY_INDEX_MATCHER type ref to CL_ABAP_REGEX read-only .
+  class-data GR_ARRAY_INDEX_ATTR_MATCHER type ref to CL_ABAP_REGEX read-only .
 
-    CLASS-METHODS get
-      IMPORTING
-        !ir_json_object        TYPE REF TO zif_json_element
-        !iv_path               TYPE string
-        !iv_default            TYPE any DEFAULT ''
-      RETURNING
-        VALUE(rr_json_element) TYPE REF TO zif_json_element .
+  class-methods GET
+    importing
+      !IR_JSON_OBJECT type ref to ZIF_JSON_ELEMENT
+      !IV_PATH type STRING
+      !IV_DEFAULT type ANY default ''
+    returning
+      value(RR_JSON_ELEMENT) type ref to ZIF_JSON_ELEMENT .
     "! <p class="shorttext synchronized" lang="en">Map JSON Element to ABAP Structure or Internal Table</p>
-    CLASS-METHODS cast_to_abap
-      IMPORTING
-        !ir_json_ele TYPE REF TO zif_json_element
-      CHANGING
-        !c_data      TYPE REF TO data .
-    CLASS-METHODS class_constructor .
-    CLASS-METHODS convert_atimestamp_utc_json
-      IMPORTING
-        VALUE(iv_timestamp)          TYPE timestamp OPTIONAL
-      RETURNING
-        VALUE(rv_json_utc_timestamp) TYPE string .
-    CLASS-METHODS convert_json_utc_atimestamp
-      IMPORTING
-        VALUE(iv_json_utc_timestamp) TYPE string
-      RETURNING
-        VALUE(rv_timestamp)          TYPE timestamp .
-
-
-    CLASS-METHODS prettify_abap_name
-      IMPORTING
-        !iv_abap_name       TYPE string
-      RETURNING
-        VALUE(rv_json_name) TYPE string.
-
+  class-methods CAST_TO_ABAP
+    importing
+      !IR_JSON_ELE type ref to ZIF_JSON_ELEMENT
+    changing
+      !C_DATA type ref to DATA .
+  class-methods CLASS_CONSTRUCTOR .
+  class-methods CONVERT_ATIMESTAMP_UTC_JSON
+    importing
+      value(IV_TIMESTAMP) type TIMESTAMP optional
+    returning
+      value(RV_JSON_UTC_TIMESTAMP) type STRING .
+  class-methods CONVERT_JSON_UTC_ATIMESTAMP
+    importing
+      value(IV_JSON_UTC_TIMESTAMP) type STRING
+    returning
+      value(RV_TIMESTAMP) type TIMESTAMP .
+  class-methods PRETTIFY_ABAP_NAME
+    importing
+      !IV_ABAP_NAME type STRING
+    returning
+      value(RV_JSON_NAME) type STRING .
   PROTECTED SECTION.
   PRIVATE SECTION.
 ENDCLASS.
 
 
 
-CLASS zcl_json_util IMPLEMENTATION.
+CLASS ZCL_JSON_UTIL IMPLEMENTATION.
 
 
   METHOD cast_to_abap.
@@ -61,27 +59,13 @@ CLASS zcl_json_util IMPLEMENTATION.
       EXPORTING
         pattern = '(^\D\w*)\[(\d*)\]'.
 
-  ENDMETHOD.
-
-  METHOD prettify_abap_name.
-
-    DATA: tokens TYPE TABLE OF char128.
-    FIELD-SYMBOLS: <token> LIKE LINE OF tokens.
-
-    rv_json_name = iv_abap_name.
-
-    TRANSLATE rv_json_name TO LOWER CASE.
-    TRANSLATE rv_json_name USING `/_:_~_`.
-    SPLIT rv_json_name AT `_` INTO TABLE tokens.
-    DELETE tokens WHERE table_line IS INITIAL.
-    LOOP AT tokens ASSIGNING <token> FROM 2.
-      TRANSLATE <token>(1) TO UPPER CASE.
-    ENDLOOP.
-
-    CONCATENATE LINES OF tokens INTO rv_json_name.
-
+    "matches <name>[{attr:val}], subMatch1 -> name, subMatch2 -> {attr:val}
+    CREATE OBJECT gr_array_index_attr_matcher
+      EXPORTING
+        pattern = '(^\D\w*)\[(.*)\]'.
 
   ENDMETHOD.
+
 
   METHOD convert_atimestamp_utc_json.
 
@@ -141,16 +125,18 @@ CLASS zcl_json_util IMPLEMENTATION.
 
   METHOD get.
 
-    DATA: lr_json_obj  TYPE REF TO zcl_json_object,
-          lr_json_arr  TYPE REF TO zcl_json_array,
-          lr_json_ele  TYPE REF TO zif_json_element,
-          lt_path      TYPE STANDARD TABLE OF string,
-          lv_path      TYPE string,
-          lv_attr_name TYPE string,
-          lv_index_str TYPE string,
-          lv_index     TYPE i,
-          lv_tabix     TYPE i,
-          lv_path_len  TYPE i.
+    DATA: lr_json_obj       TYPE REF TO zcl_json_object,
+          lr_json_arr       TYPE REF TO zcl_json_array,
+          lr_json_ele       TYPE REF TO zif_json_element,
+          lt_path           TYPE STANDARD TABLE OF string,
+          lv_path           TYPE string,
+          lv_attr_name      TYPE string,
+          lv_index_str      TYPE string,
+          lv_index_attr_str TYPE string,
+          lr_index_ele      TYPE REF TO zif_json_element,
+          lv_index          TYPE i,
+          lv_tabix          TYPE i,
+          lv_path_len       TYPE i.
 
     DATA: lr_matcher TYPE REF TO cl_abap_matcher.
 
@@ -167,7 +153,7 @@ CLASS zcl_json_util IMPLEMENTATION.
     LOOP AT lt_path INTO lv_path.
 
       lv_tabix = sy-tabix.
-      CLEAR: lv_attr_name, lv_index_str, lv_index.
+      CLEAR: lv_attr_name, lv_index_str, lv_index, lv_index_attr_str.
 
       "check if array index is referred [*]
       lr_matcher = gr_array_index_matcher->create_matcher( text = lv_path ).
@@ -176,9 +162,23 @@ CLASS zcl_json_util IMPLEMENTATION.
         lv_attr_name = lr_matcher->get_submatch( 1 ).
         lv_index_str = lr_matcher->get_submatch( 2 ).
         lv_index = lv_index_str.
+        lr_index_ele = zcl_json_primitive=>from_string( lv_index_str ).
       ELSE.
-        "attribute
-        lv_attr_name = lv_path.
+        lr_matcher = gr_array_index_attr_matcher->create_matcher( text = lv_path ).
+        IF lr_matcher IS BOUND AND lr_matcher->match( ) IS NOT INITIAL.
+          "array Attribute Check found
+          lv_attr_name = lr_matcher->get_submatch( 1 ).
+          lv_index_attr_str = lr_matcher->get_submatch( 2 ).
+          zcl_json_parser=>from_json(
+            EXPORTING
+              json                 = lv_index_attr_str
+            CHANGING
+              json_element         = lr_index_ele
+          ).
+        ELSE.
+          "attribute
+          lv_attr_name = lv_path.
+        ENDIF.
       ENDIF.
 
       IF lr_json_ele->is_object( ) EQ abap_true.
@@ -191,7 +191,7 @@ CLASS zcl_json_util IMPLEMENTATION.
         ENDIF.
 
         IF lr_json_ele->is_array( ) EQ abap_true.
-          IF lv_index_str IS INITIAL.
+          IF lv_index_str IS INITIAL AND lv_index_attr_str IS INITIAL.
             IF lv_tabix EQ lv_path_len.
               "last item in the path, can return the Array
               EXIT.
@@ -200,7 +200,10 @@ CLASS zcl_json_util IMPLEMENTATION.
           ENDIF.
 
           lr_json_arr ?= lr_json_ele.
-          lr_json_ele = lr_json_arr->get_by_index( lv_index ).
+*          lr_json_ele = lr_json_arr->get_by_index( lv_index ).
+          IF lr_index_ele IS BOUND.
+            lr_json_ele = lr_json_arr->find( lr_index_ele ).
+          ENDIF.
 
         ELSE.
           IF lv_index_str IS NOT INITIAL.
@@ -230,6 +233,27 @@ CLASS zcl_json_util IMPLEMENTATION.
     ENDIF.
 
     rr_json_element = lr_json_ele.
+
+  ENDMETHOD.
+
+
+  METHOD prettify_abap_name.
+
+    DATA: tokens TYPE TABLE OF char128.
+    FIELD-SYMBOLS: <token> LIKE LINE OF tokens.
+
+    rv_json_name = iv_abap_name.
+
+    TRANSLATE rv_json_name TO LOWER CASE.
+    TRANSLATE rv_json_name USING `/_:_~_`.
+    SPLIT rv_json_name AT `_` INTO TABLE tokens.
+    DELETE tokens WHERE table_line IS INITIAL.
+    LOOP AT tokens ASSIGNING <token> FROM 2.
+      TRANSLATE <token>(1) TO UPPER CASE.
+    ENDLOOP.
+
+    CONCATENATE LINES OF tokens INTO rv_json_name.
+
 
   ENDMETHOD.
 ENDCLASS.

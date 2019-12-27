@@ -7,6 +7,8 @@ class ZCL_JSON_ARRAY definition
 public section.
   type-pools ABAP .
 
+  data MT_ELEMENTS type ZJSON_ELEMENTS_TAB read-only .
+
   methods ADD
     importing
       !IV_VALUE type ANY optional
@@ -35,6 +37,11 @@ public section.
   methods LENGTH
     returning
       value(RV_LENGTH) type INT4 .
+  methods FIND
+    importing
+      !IR_CONDITION type ref to ZIF_JSON_ELEMENT
+    returning
+      value(RR_RESULT) type ref to ZIF_JSON_ELEMENT .
 
   methods ZIF_JSON_ELEMENT~AS_DATA
     redefinition .
@@ -66,10 +73,11 @@ public section.
     redefinition .
   methods ZIF_JSON_ITERATOR~SIZE
     redefinition .
+  methods ZIF_JSON_ELEMENT~AS_STRING
+    redefinition .
 protected section.
 private section.
 
-  data MT_ELEMENTS type ZJSON_ELEMENTS_TAB .
   data MR_TABLE type ref to DATA .
   data MR_TABLEDESCR type ref to CL_ABAP_TABLEDESCR .
 ENDCLASS.
@@ -160,6 +168,59 @@ METHOD constructor.
   ENDIF.
 
 ENDMETHOD.
+
+
+  METHOD find.
+    DATA: lv_index   TYPE i,
+          lv_found   TYPE abap_bool VALUE abap_false,
+          lr_obj_src TYPE REF TO zcl_json_object,
+          lr_obj_chk TYPE REF TO zcl_json_object.
+
+    IF ir_condition IS NOT BOUND.
+      zcx_json_exception=>raise( iv_msg = 'Empty Condition for Array Find' ).
+    ENDIF.
+
+    IF ir_condition->is_object( ) EQ abap_true.
+      lr_obj_chk ?= ir_condition.
+
+      LOOP AT mt_elements INTO DATA(lr_element).
+        CHECK lr_element->is_object( ) EQ abap_true.
+        lr_obj_src ?= lr_element.
+
+        lv_found = abap_false.
+        "compare object values partial
+        LOOP AT lr_obj_chk->mt_members ASSIGNING FIELD-SYMBOL(<fr_member_chk>).
+
+          READ TABLE lr_obj_src->mt_members ASSIGNING FIELD-SYMBOL(<fr_member_src>)
+             WITH KEY name = <fr_member_chk>-name.
+          IF sy-subrc IS NOT INITIAL. "no member with the name found in src object, exit
+            lv_found = abap_false.
+            EXIT.
+          ENDIF.
+
+          IF <fr_member_chk>-value->equals( ir_element = <fr_member_src>-value ) EQ abap_true.
+            lv_found = abap_true.
+          ELSE.
+            lv_found = abap_false.
+            EXIT.
+          ENDIF.
+
+        ENDLOOP.
+
+        IF lv_found EQ abap_true. "exit on first match
+          rr_result = lr_element.
+          EXIT.
+        ENDIF.
+
+      ENDLOOP.
+
+    ELSEIF ir_condition->is_number( ) EQ abap_true.
+      ir_condition->as_data( CHANGING cv_data = lv_index ).
+      rr_result = get_by_index( iv_index =  lv_index ).
+    ELSE.
+      zcx_json_exception=>raise( iv_msg = |Unsupported Array Find argument| ).
+    ENDIF.
+  ENDMETHOD.
 
 
 METHOD get.
@@ -270,6 +331,11 @@ ENDMETHOD.
         zcx_json_exception=>raise( iv_msg_number = '001' iv_msgv1 = 'Table' ).
     ENDTRY.
 
+  ENDMETHOD.
+
+
+  METHOD zif_json_element~as_string.
+    rv_string = to_string( ).
   ENDMETHOD.
 
 

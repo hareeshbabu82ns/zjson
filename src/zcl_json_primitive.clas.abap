@@ -69,7 +69,7 @@ ENDCLASS.
 
 
 
-CLASS zcl_json_primitive IMPLEMENTATION.
+CLASS ZCL_JSON_PRIMITIVE IMPLEMENTATION.
 
 
   METHOD class_constructor.
@@ -535,7 +535,17 @@ CLASS zcl_json_primitive IMPLEMENTATION.
       DATA: lr_typedescr TYPE REF TO cl_abap_typedescr.
       lr_typedescr ?= ir_element->get_abap_type( ).
 
-      CHECK mr_descr->type_kind EQ lr_typedescr->type_kind.
+      CHECK mr_descr->kind EQ lr_typedescr->kind.
+*      CHECK mr_descr->type_kind EQ lr_typedescr->type_kind.
+      CASE mr_descr->type_kind.
+        WHEN  cl_abap_typedescr=>typekind_char
+          OR cl_abap_typedescr=>typekind_string.
+          CHECK lr_typedescr->type_kind EQ cl_abap_typedescr=>typekind_char
+            OR lr_typedescr->type_kind EQ cl_abap_typedescr=>typekind_string.
+
+        WHEN OTHERS.
+          CHECK mr_descr->type_kind EQ lr_typedescr->type_kind.
+      ENDCASE.
 
       DATA: lr_dref TYPE REF TO data.
       FIELD-SYMBOLS: <fs_val_src>  TYPE any,

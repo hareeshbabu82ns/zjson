@@ -78,7 +78,8 @@ CLASS ztest_json_util IMPLEMENTATION.
             EXPORTING json = `{` &&
                 `"attr1":"value","attr2":"value2",` &&
                 `"arr1":["arrValue1","arrValue2",` &&
-                `{"deepArrAttr1":"deepArrVal1"}],` &&
+                `{"deepArrAttr1":"deepArrVal1"},` &&
+                `{"deepArrAttr1":"deepArrVal2"}],` &&
                 `"deepObj":{ "attr1":"deepValue1" }` &&
               `}`
             CHANGING json_element = lr_json_object ).
@@ -168,6 +169,16 @@ CLASS ztest_json_util IMPLEMENTATION.
     lr_json_result = zcl_json_util=>get(
         ir_json_object = lr_json_object
         iv_path = 'arr1[2].deepArrAttr1' ).
+
+    cl_abap_unit_assert=>assert_equals(
+      act   = lr_json_result->as_string( )
+      exp   = lv_exp_result ).
+
+    " Get deep Array Attribute with SubObject Attribute
+    lv_exp_result = 'deepArrVal2'.
+    lr_json_result = zcl_json_util=>get(
+        ir_json_object = lr_json_object
+        iv_path = 'arr1[{"deepArrAttr1":"deepArrVal2"}].deepArrAttr1' ).
 
     cl_abap_unit_assert=>assert_equals(
       act   = lr_json_result->as_string( )
