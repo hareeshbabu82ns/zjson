@@ -33,6 +33,8 @@ CLASS ztest_json_util DEFINITION FOR TESTING
     METHODS: teardown.
     METHODS: get_success FOR TESTING,
       get_fail FOR TESTING.
+    METHODS: prettefy_json_to_abap FOR TESTING,
+      prettefy_json_to_abap_fail FOR TESTING.
 ENDCLASS.       "ztest_Json_Util
 
 
@@ -65,6 +67,64 @@ CLASS ztest_json_util IMPLEMENTATION.
 
   ENDMETHOD.       "teardown
 
+  METHOD prettefy_json_to_abap.
+    DATA: lv_json_name     TYPE string,
+          lv_abap_name     TYPE string,
+          lv_abap_name_act TYPE string.
+
+    lv_abap_name = 'ABAP_NAME'.
+    lv_json_name = zcl_json_util=>prettify_abap_name( lv_abap_name ).
+    lv_abap_name_act = zcl_json_util=>prettify_to_abap_name( lv_json_name ).
+
+    cl_abap_unit_assert=>assert_equals( act = lv_abap_name_act exp = lv_abap_name
+      msg = |ABAP name conversion failed for { lv_abap_name }| ).
+
+    lv_abap_name = 'ABAP_NAME93'.
+    lv_json_name = zcl_json_util=>prettify_abap_name( lv_abap_name ).
+    lv_abap_name_act = zcl_json_util=>prettify_to_abap_name( lv_json_name ).
+
+    cl_abap_unit_assert=>assert_equals( act = lv_abap_name_act exp = lv_abap_name
+      msg = |ABAP name conversion failed for { lv_abap_name }| ).
+
+  ENDMETHOD.
+
+  METHOD prettefy_json_to_abap_fail.
+    DATA: lv_json_name     TYPE string,
+          lv_abap_name     TYPE string,
+          lv_abap_name_act TYPE string.
+
+    lv_abap_name = '/ABAP_NAME'.
+    lv_json_name = zcl_json_util=>prettify_abap_name( lv_abap_name ).
+    lv_abap_name_act = zcl_json_util=>prettify_to_abap_name( lv_json_name ).
+
+    cl_abap_unit_assert=>assert_false(
+      act = boolc( lv_abap_name_act EQ lv_abap_name )
+      msg = |ABAP name conversion should fail for { lv_abap_name }| ).
+
+    lv_abap_name = '_ABAP_NAME'.
+    lv_json_name = zcl_json_util=>prettify_abap_name( lv_abap_name ).
+    lv_abap_name_act = zcl_json_util=>prettify_to_abap_name( lv_json_name ).
+
+    cl_abap_unit_assert=>assert_false(
+      act = boolc( lv_abap_name_act EQ lv_abap_name )
+      msg = |ABAP name conversion should fail for { lv_abap_name }| ).
+
+    lv_abap_name = 'ABAP_NAME_9'.
+    lv_json_name = zcl_json_util=>prettify_abap_name( lv_abap_name ).
+    lv_abap_name_act = zcl_json_util=>prettify_to_abap_name( lv_json_name ).
+
+    cl_abap_unit_assert=>assert_false(
+      act = boolc( lv_abap_name_act EQ lv_abap_name )
+      msg = |ABAP name conversion should fail for { lv_abap_name }| ).
+
+    lv_abap_name = 'ABAP~NAME'.
+    lv_json_name = zcl_json_util=>prettify_abap_name( lv_abap_name ).
+    lv_abap_name_act = zcl_json_util=>prettify_to_abap_name( lv_json_name ).
+
+    cl_abap_unit_assert=>assert_false(
+      act = boolc( lv_abap_name_act EQ lv_abap_name )
+      msg = |ABAP name conversion should fail for { lv_abap_name }| ).
+  ENDMETHOD.
 
   METHOD get_success.
 * ===========

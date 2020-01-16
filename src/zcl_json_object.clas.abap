@@ -298,10 +298,10 @@ METHOD Zif_json_element~deep_copy.
 ENDMETHOD.
 
 
-METHOD Zif_json_element~equals.
-  DATA: lr_that TYPE REF TO Zcl_json_object.
+METHOD zif_json_element~equals.
+  DATA: lr_that TYPE REF TO zcl_json_object.
 
-  FIELD-SYMBOLS: <fr_member> LIKE LINE OF mt_members,
+  FIELD-SYMBOLS: <fr_member>   LIKE LINE OF mt_members,
                  <fr_mem_that> LIKE LINE OF mt_members.
 
   rv_equal = abap_false.
@@ -315,9 +315,13 @@ METHOD Zif_json_element~equals.
 
     LOOP AT mt_members ASSIGNING <fr_member>. "deep compare
       READ TABLE lr_that->mt_members ASSIGNING <fr_mem_that> WITH KEY name = <fr_member>-name.
-      CHECK sy-subrc IS INITIAL. "no member with the name found in other object, exit
+      IF sy-subrc IS NOT INITIAL. "no member with the name found in other object, exit
+        EXIT.
+      ENDIF.
 
-      CHECK <fr_mem_that>-value->equals( ir_element = <fr_member>-value ) EQ abap_true.
+      IF <fr_mem_that>-value->equals( ir_element = <fr_member>-value ) NE abap_true.
+        EXIT.
+      ENDIF.
 
     ENDLOOP.
 

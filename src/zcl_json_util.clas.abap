@@ -38,6 +38,11 @@ public section.
       !IV_ABAP_NAME type STRING
     returning
       value(RV_JSON_NAME) type STRING .
+  class-methods PRETTIFY_TO_ABAP_NAME
+    importing
+      !IV_JSON_NAME type STRING
+    returning
+      value(RV_ABAP_NAME) type STRING .
   PROTECTED SECTION.
   PRIVATE SECTION.
 ENDCLASS.
@@ -254,6 +259,26 @@ CLASS ZCL_JSON_UTIL IMPLEMENTATION.
 
     CONCATENATE LINES OF tokens INTO rv_json_name.
 
+
+  ENDMETHOD.
+
+
+  METHOD PRETTIFY_TO_ABAP_NAME.
+* NOTE
+* this would not acurate in converting json name to abap name
+* if following
+*    - starting char itself is one of _/~:
+*    - if char is one of /~: at any position
+* since no way to find it once replaced with Capital Letter
+
+    CHECK iv_json_name IS NOT INITIAL.
+
+    rv_abap_name = replace( val   = iv_json_name
+                    regex = `([A-Z])`
+                    with  = `_$0`
+                    occ   =   0 ).
+
+    TRANSLATE rv_abap_name TO UPPER CASE.
 
   ENDMETHOD.
 ENDCLASS.
