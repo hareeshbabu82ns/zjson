@@ -31,6 +31,7 @@ CLASS zcl_json_parser DEFINITION
         !name         TYPE string OPTIONAL
         !pretty_name  TYPE char1 DEFAULT pretty_mode-none
         !type_descr   TYPE REF TO cl_abap_typedescr OPTIONAL
+        !name_map     TYPE zjson_name_map_tab OPTIONAL
       RETURNING
         VALUE(r_json) TYPE string .
     CLASS-METHODS from_json
@@ -39,6 +40,7 @@ CLASS zcl_json_parser DEFINITION
         !pretty_name          TYPE char1 DEFAULT pretty_mode-none
         !special_token_bounds TYPE string OPTIONAL
         !offset               TYPE offset OPTIONAL
+        !name_map     TYPE zjson_name_map_tab OPTIONAL
       CHANGING
         !data                 TYPE data OPTIONAL
         !json_element         TYPE REF TO zif_json_element OPTIONAL
@@ -53,24 +55,25 @@ CLASS zcl_json_parser DEFINITION
       RETURNING
         VALUE(rv_offset) TYPE offset .
   PROTECTED SECTION.
-  PRIVATE SECTION.
+private section.
 
-    DATA mr_data TYPE REF TO data .
-    DATA mr_element TYPE REF TO zif_json_element .
-    DATA mv_parse_to_data TYPE abap_bool VALUE abap_false.  "#EC NOTEXT
-    DATA mv_json TYPE string .
-    DATA mv_json_length TYPE i .
-    DATA mv_offset TYPE i .
-    DATA mv_pritty_name_mode TYPE char1 VALUE pretty_mode-none. "#EC NOTEXT
-    CLASS-DATA mv_white_space TYPE string .
-    DATA mr_json_builder TYPE REF TO zcl_json_builder.
-    DATA mv_json_token_bounds TYPE string VALUE ` []{}:"`.  "#EC NOTEXT
-    DATA mv_ignore_colon TYPE abap_bool VALUE abap_false.   "#EC NOTEXT
+  data MR_DATA type ref to DATA .
+  data MR_ELEMENT type ref to ZIF_JSON_ELEMENT .
+  data MV_PARSE_TO_DATA type ABAP_BOOL value ABAP_FALSE ##NO_TEXT.
+  data MV_JSON type STRING .
+  data MV_JSON_LENGTH type I .
+  data MV_OFFSET type I .
+  data MV_PRITTY_NAME_MODE type CHAR1 value PRETTY_MODE-NONE ##NO_TEXT.
+  class-data MV_WHITE_SPACE type STRING .
+  data MR_JSON_BUILDER type ref to ZCL_JSON_BUILDER .
+  data MV_JSON_TOKEN_BOUNDS type STRING value ` []{}:"` ##NO_TEXT.
+  data MV_IGNORE_COLON type ABAP_BOOL value ABAP_FALSE ##NO_TEXT.
+  data MT_NAME_MAP type ZJSON_NAME_MAP_TAB .
 ENDCLASS.
 
 
 
-CLASS zcl_json_parser IMPLEMENTATION.
+CLASS ZCL_JSON_PARSER IMPLEMENTATION.
 
 
   METHOD class_constructor.
@@ -109,6 +112,7 @@ CLASS zcl_json_parser IMPLEMENTATION.
 
     lr_parser->mv_offset = offset.
     lr_parser->mv_pritty_name_mode = pretty_name.
+    lr_parser->mt_name_map = name_map.
 
     IF data IS SUPPLIED.
       lr_parser->mv_parse_to_data = abap_true.
@@ -447,7 +451,8 @@ CLASS zcl_json_parser IMPLEMENTATION.
         lrf_descr = type_descr.
       ENDIF.
 
-      r_json = zcl_json=>dump( data = data compress = compress pretty_name = pretty_name type_descr = lrf_descr ).
+      r_json = zcl_json=>dump( data = data compress = compress pretty_name = pretty_name
+                  type_descr = lrf_descr name_map = name_map ).
 
     ELSEIF json_element IS SUPPLIED AND json_element IS BOUND.
 

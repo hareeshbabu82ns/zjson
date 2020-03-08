@@ -16,6 +16,12 @@ interface ZIF_JSON_ELEMENT
   constants C_VALUE_BOOL_TRUE type STRING value 'true' ##NO_TEXT.
   constants C_VALUE_BOOL_FALSE type STRING value 'false' ##NO_TEXT.
 
+  class-methods FROM_DATA
+    importing
+      !IV_DATA type ANY
+      !IT_NAMES_MAP type ZJSON_NAME_VALUE_TAB
+    returning
+      value(RV_JSON) type ref to ZIF_JSON_ELEMENT .
   methods DEEP_COPY
     returning
       value(RV_ELEMENT) type ref to ZIF_JSON_ELEMENT .

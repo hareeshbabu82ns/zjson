@@ -12,6 +12,14 @@
     <UNICODE>X</UNICODE>
     <WITH_UNIT_TESTS>X</WITH_UNIT_TESTS>
    </VSEOCLASS>
+   <DESCRIPTIONS>
+    <SEOCOMPOTX>
+     <CLSNAME>ZCL_JSON_PARSER</CLSNAME>
+     <CMPNAME>MT_NAME_MAP</CMPNAME>
+     <LANGU>E</LANGU>
+     <DESCRIPT>JSON ABAP name to JSON name mapping table</DESCRIPT>
+    </SEOCOMPOTX>
+   </DESCRIPTIONS>
   </asx:values>
  </asx:abap>
 </abapGit>

@@ -53,6 +53,7 @@ CLASS zcl_json DEFINITION
         !compress     TYPE abap_bool DEFAULT abap_false
         !type_descr   TYPE REF TO cl_abap_typedescr OPTIONAL
         !pretty_name  TYPE pretty_name_mode DEFAULT pretty_mode-none
+        !name_map     TYPE zjson_name_map_tab OPTIONAL
       RETURNING
         VALUE(r_json) TYPE string .
     CLASS-METHODS deserialize
@@ -68,6 +69,7 @@ CLASS zcl_json DEFINITION
         !name         TYPE string OPTIONAL
         !pretty_name  TYPE pretty_name_mode DEFAULT pretty_mode-none
         !type_descr   TYPE REF TO cl_abap_typedescr OPTIONAL
+        !name_map     TYPE zjson_name_map_tab OPTIONAL
       RETURNING
         VALUE(r_json) TYPE string .
     CLASS-METHODS dump_type
@@ -109,7 +111,7 @@ ENDCLASS.
 
 
 
-CLASS zcl_json IMPLEMENTATION.
+CLASS ZCL_JSON IMPLEMENTATION.
 
 
   METHOD class_constructor.
@@ -161,7 +163,8 @@ CLASS zcl_json IMPLEMENTATION.
                    <value>        TYPE any,
                    <data>         TYPE data,
                    <symbol_table> LIKE LINE OF lt_symbols,
-                   <table>        TYPE ANY TABLE.
+                   <table>        TYPE ANY TABLE,
+                   <fs_name_map>  LIKE LINE OF name_map.
 
     " we need here macro instead of method calls because of the performance reasons.
     " Based on SAT measurments.
@@ -176,7 +179,8 @@ CLASS zcl_json IMPLEMENTATION.
           lo_data_ref ?= data.
           lo_typedesc = cl_abap_typedescr=>describe_by_data_ref( lo_data_ref ).
           ASSIGN lo_data_ref->* TO <data>.
-          r_json = dump( data = <data> compress = compress pretty_name = pretty_name type_descr = lo_typedesc ).
+          r_json = dump( data = <data> compress = compress pretty_name = pretty_name type_descr = lo_typedesc
+                        name_map = name_map ).
         ELSE.
           lo_obj_ref ?= data.
           lo_classdesc ?= cl_abap_typedescr=>describe_by_object_ref( lo_obj_ref ).
@@ -186,8 +190,15 @@ CLASS zcl_json IMPLEMENTATION.
             ASSIGN lo_obj_ref->(<attr>-name) TO <value>.
             IF compress EQ abap_false OR <value> IS NOT INITIAL.
               lo_typedesc = cl_abap_typedescr=>describe_by_data( <value> ).
-              lv_itemval = dump( data = <value> compress = compress pretty_name = pretty_name type_descr = lo_typedesc ).
-              format_name <attr>-name pretty_name lv_prop_name.
+              lv_itemval = dump( data = <value> compress = compress pretty_name = pretty_name type_descr = lo_typedesc
+                                    name_map = name_map ).
+              READ TABLE name_map WITH KEY abap_name = <attr>-name
+                      ASSIGNING <fs_name_map>.
+              IF sy-subrc IS INITIAL.
+                lv_prop_name = <fs_name_map>-json_name.
+              ELSE.
+                format_name <attr>-name pretty_name lv_prop_name.
+              ENDIF.
               CONCATENATE `"` lv_prop_name  `":` lv_itemval INTO lv_itemval.
               APPEND lv_itemval TO lv_properties.
             ENDIF.
@@ -210,8 +221,15 @@ CLASS zcl_json IMPLEMENTATION.
         LOOP AT lt_symbols ASSIGNING <symbol_table>.
           ASSIGN COMPONENT <symbol_table>-name OF STRUCTURE data TO <value>.
           IF compress EQ abap_false OR <value> IS NOT INITIAL.
-            lv_itemval = dump( data = <value> compress = compress pretty_name = pretty_name type_descr = <symbol_table>-type ).
-            format_name <symbol_table>-name pretty_name lv_prop_name.
+            lv_itemval = dump( data = <value> compress = compress pretty_name = pretty_name type_descr = <symbol_table>-type
+                               name_map = name_map ).
+            READ TABLE name_map WITH KEY abap_name = <symbol_table>-name
+                  ASSIGNING <fs_name_map>.
+            IF sy-subrc IS INITIAL.
+              lv_prop_name = <fs_name_map>-json_name.
+            ELSE.
+              format_name <symbol_table>-name pretty_name lv_prop_name.
+            ENDIF.
             CONCATENATE `"` lv_prop_name  `":` lv_itemval INTO lv_itemval.
             APPEND lv_itemval TO lv_properties.
           ENDIF.
@@ -244,7 +262,13 @@ CLASS zcl_json IMPLEMENTATION.
           LOOP AT lt_symbols ASSIGNING <symbol_table>.
             APPEND INITIAL LINE TO columns ASSIGNING <column>.
             MOVE-CORRESPONDING <symbol_table> TO <column>.
-            format_name <symbol_table>-name pretty_name <column>-header.
+            READ TABLE name_map WITH KEY abap_name = <symbol_table>-name
+                  ASSIGNING <fs_name_map>.
+            IF sy-subrc IS INITIAL.
+              <column>-header = <fs_name_map>-json_name.
+            ELSE.
+              format_name <symbol_table>-name pretty_name <column>-header.
+            ENDIF.
             CONCATENATE `"` <column>-header  `":` INTO <column>-header.
           ENDLOOP.
           LOOP AT <table> ASSIGNING <line>.
@@ -257,7 +281,8 @@ CLASS zcl_json IMPLEMENTATION.
                   "lv_itemval = dump_type( data = <value> type_descr = l_elem_descr ).
                   dump_type <value> lo_elem_descr lv_itemval.
                 ELSE.
-                  lv_itemval = dump( data = <value> compress = compress pretty_name = pretty_name type_descr = <column>-type ).
+                  lv_itemval = dump( data = <value> compress = compress pretty_name = pretty_name type_descr = <column>-type
+                                      name_map = name_map ).
                 ENDIF.
                 CONCATENATE <column>-header lv_itemval INTO lv_itemval.
                 APPEND lv_itemval TO lv_fields.
@@ -269,7 +294,8 @@ CLASS zcl_json IMPLEMENTATION.
           ENDLOOP.
         ELSE.
           LOOP AT <table> ASSIGNING <value>.
-            lv_itemval = dump( data = <value> compress = compress pretty_name = pretty_name type_descr = lo_typedesc ).
+            lv_itemval = dump( data = <value> compress = compress pretty_name = pretty_name type_descr = lo_typedesc
+                                name_map = name_map ).
             APPEND lv_itemval TO lv_properties.
           ENDLOOP.
         ENDIF.
@@ -617,7 +643,8 @@ CLASS zcl_json IMPLEMENTATION.
       lrf_descr = type_descr.
     ENDIF.
 
-    r_json = dump( data = data compress = compress pretty_name = pretty_name type_descr = lrf_descr ).
+    r_json = dump( data = data compress = compress pretty_name = pretty_name
+              type_descr = lrf_descr name_map = name_map ).
 
     " we do not do escaping of every single string value for white space characters,
     " but we do it on top, to replace multiple calls by 3 only, while we do not serialize

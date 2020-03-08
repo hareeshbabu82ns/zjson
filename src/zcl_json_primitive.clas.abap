@@ -145,7 +145,7 @@ CLASS ZCL_JSON_PRIMITIVE IMPLEMENTATION.
       IF rr_primitive IS NOT BOUND. "not yet converted
         SPLIT iv_string AT '.' INTO lv_split_whole lv_split_decimal.
         lv_len = strlen( lv_split_decimal ). "fractional part
-        lv_int = strlen( lv_split_whole ) + 2. "intiger part
+        lv_int = strlen( lv_split_whole ) + 1 . "intiger part
         lr_descr = cl_abap_elemdescr=>get_p( p_length = lv_int p_decimals = lv_len ).
 *        lr_descr = cl_abap_elemdescr=>get_decfloat16( ).
         CREATE DATA lr_data TYPE HANDLE lr_descr.
