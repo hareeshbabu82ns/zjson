@@ -419,6 +419,21 @@ CLASS ztest_json_primitive IMPLEMENTATION.
     ).
 
 *--------------------------------------------------------------------*
+*---Convert String with NewLine to JSON String---*
+    DATA(lv_str_crlf) = |test1 \n test2|.
+    DATA(lv_str_crlf_res) = '"test1 \n test2"'.
+
+    r_primitive = zcl_json_primitive=>create( lv_str_crlf ).
+
+    rv_string = r_primitive->to_string( ).
+
+    cl_abap_unit_assert=>assert_equals(
+      act   = rv_string
+      exp   = lv_str_crlf_res
+      msg   = 'String Conversion failed'
+    ).
+
+*--------------------------------------------------------------------*
     DATA: lr_null TYPE REF TO zif_json_element.
 
     lr_null = zcl_json_null=>get_instance( ).

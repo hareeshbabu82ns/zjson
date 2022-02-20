@@ -60,7 +60,7 @@ CLASS ztest_json_parser IMPLEMENTATION.
 * =============
 
     v_json_str = |\{"data":\{"number":{ v_big_int },"bool":{ v_bool_str },"null":null,"array":[|.
-    v_json_str = |{ v_json_str }{ v_int },\{"negFloat":{ v_nfloat },"string":"{ v_string }"\}|.
+    v_json_str = |{ v_json_str }{ v_int },\{"negFloat":{ v_nfloat },"string":"{ v_string }","stringWithNewLine":"test1\\ntest2"\}|.
     v_json_str = |{ v_json_str },{ v_nint },{ v_bool_str }]\}\}|.
 
   ENDMETHOD.       "setup
